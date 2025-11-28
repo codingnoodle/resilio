@@ -30,6 +30,20 @@ def format_entity_name(entity_name: str) -> str:
         formatted = formatted.replace(old, new)
     return formatted
 
+def format_location_name(location_name: str) -> str:
+    """Format location node names for display"""
+    if not location_name: return "Unknown"
+    location_display_map = {
+        "Mock_Town_NJ_USA": "Mock Town, NJ",
+        "North_Cove_NC_USA": "North Cove, NC",
+        "Rocky_Mount_NC_USA": "Rocky Mount, NC",
+        "Mumbai_Zone_A": "Mumbai, India",
+        "Rotterdam_Port_EU": "Rotterdam, EU",
+    }
+    if location_name in location_display_map:
+        return location_display_map[location_name]
+    return location_name.replace("_", " ").title()
+
 def format_product_name(product_name: str) -> str:
     if not product_name: return "Unknown"
     # Map to display names
@@ -224,8 +238,11 @@ def render_network_graph(graph, impacted_products=None, source_node=None):
         is_active = edge in highlighted_edges
         
         # Clean names for tooltip
-        src_name = format_entity_name(edge[0])
-        tgt_name = format_entity_name(edge[1])
+        # Format names based on node type
+        src_type = graph.nodes[edge[0]].get('type', '')
+        tgt_type = graph.nodes[edge[1]].get('type', '')
+        src_name = format_location_name(edge[0]) if 'Location' in src_type else format_entity_name(edge[0])
+        tgt_name = format_location_name(edge[1]) if 'Location' in tgt_type else format_entity_name(edge[1])
         
         # Contextual tooltip: show IMPACT PATH for active edges
         status_text = "⚠️ <b>IMPACT PATH</b>" if is_active else "Standard Flow"
@@ -245,31 +262,27 @@ def render_network_graph(graph, impacted_products=None, source_node=None):
         if is_active:
             # Highlighted path (red, thick) - only when scenario is active
             highlight_x.extend([x0, x1, None]); highlight_y.extend([y0, y1, None])
-            # Add hover markers at midpoint for highlighted edges (separate trace for better interaction)
-            mx, my = (x0 + x1) / 2, (y0 + y1) / 2
-            highlight_hover_x.append(mx)
-            highlight_hover_y.append(my)
-            highlight_hover_text.append(tooltip_text)
+            # Add multiple hover markers along the edge for better interaction (avoid overlap issues)
+            # Use 3 points: 25%, 50%, 75% along the edge
+            for frac in [0.25, 0.5, 0.75]:
+                mx = x0 + (x1 - x0) * frac
+                my = y0 + (y1 - y0) * frac
+                highlight_hover_x.append(mx)
+                highlight_hover_y.append(my)
+                highlight_hover_text.append(tooltip_text)
         else:
-            # Non-highlighted edges
+            # Non-highlighted edges - ALWAYS add hover markers for ALL edges (except product-product)
             source_type = graph.nodes[edge[0]].get('type', '')
             target_type = graph.nodes[edge[1]].get('type', '')
-            # Filter product-product edges to reduce clutter (only in active scenario)
-            if is_active_scenario:
-                # In active scenario: show faint edges for non-impacted paths (exclude product-product)
-                if not ('Product' in source_type and 'Product' in target_type):
-                    edge_x.extend([x0, x1, None]); edge_y.extend([y0, y1, None])
-                    # Add hover markers for non-highlighted edges
-                    mx, my = (x0 + x1) / 2, (y0 + y1) / 2
-                    mid_x.append(mx)
-                    mid_y.append(my)
-                    mid_text.append(tooltip_text)
-            else:
-                # No scenario selected: show ALL edges in normal color for full visibility
-                if not ('Product' in source_type and 'Product' in target_type):
-                    edge_x.extend([x0, x1, None]); edge_y.extend([y0, y1, None])
-                    # Add hover markers for all edges when no scenario
-                    mx, my = (x0 + x1) / 2, (y0 + y1) / 2
+            # Filter product-product edges to reduce clutter
+            if not ('Product' in source_type and 'Product' in target_type):
+                # Always show the edge line
+                edge_x.extend([x0, x1, None]); edge_y.extend([y0, y1, None])
+                # Add multiple hover markers along the edge for better interaction (avoid overlap issues)
+                # Use 3 points: 25%, 50%, 75% along the edge
+                for frac in [0.25, 0.5, 0.75]:
+                    mx = x0 + (x1 - x0) * frac
+                    my = y0 + (y1 - y0) * frac
                     mid_x.append(mx)
                     mid_y.append(my)
                     mid_text.append(tooltip_text)
@@ -286,16 +299,18 @@ def render_network_graph(graph, impacted_products=None, source_node=None):
     highlight_trace = go.Scatter(x=highlight_x, y=highlight_y, line=dict(width=3, color='red'), hoverinfo='none', mode='lines')
     
     # Separate hover trace for highlighted edges (on top, larger size for easy interaction)
+    # Fully transparent markers - invisible but provide hover interaction
     highlight_hover_trace = go.Scatter(
         x=highlight_hover_x, y=highlight_hover_y, mode='markers', text=highlight_hover_text, hoverinfo='text',
-        marker=dict(size=30, color='rgba(0,0,0,0)'), showlegend=False,  # Large invisible markers for highlighted edges
+        marker=dict(size=40, color='rgba(0,0,0,0)', line=dict(width=0)), showlegend=False,  # Fully transparent, large for easy hover
         hovertemplate='%{text}<extra></extra>'
     )
     
-    # Hover markers for non-highlighted edges
+    # Hover markers for non-highlighted edges (ALWAYS create, even if empty, to avoid errors)
+    # Fully transparent markers - invisible but provide hover interaction
     edge_hover_trace = go.Scatter(
-        x=mid_x, y=mid_y, mode='markers', text=mid_text, hoverinfo='text',
-        marker=dict(size=25, color='rgba(0,0,0,0)'), showlegend=False,  # Invisible markers for standard edges
+        x=mid_x if mid_x else [None], y=mid_y if mid_y else [None], mode='markers', text=mid_text if mid_text else [''], hoverinfo='text',
+        marker=dict(size=40, color='rgba(0,0,0,0)', line=dict(width=0)), showlegend=False,  # Fully transparent, large for easy hover
         hovertemplate='%{text}<extra></extra>'
     )
     
@@ -324,7 +339,12 @@ def render_network_graph(graph, impacted_products=None, source_node=None):
         
         node_color.append(final_c)
         
-        hover_info = f"<b>{format_entity_name(node)}</b><br>{ntype}"
+        # Format node name based on type
+        if 'Location' in ntype:
+            node_display = format_location_name(node)
+        else:
+            node_display = format_entity_name(node)
+        hover_info = f"<b>{node_display}</b><br>{ntype}"
         if 'revenue_annual' in data: hover_info += f"<br>💰 Rev: ${data['revenue_annual']:,.0f}"
         if 'inventory_weeks' in data: hover_info += f"<br>📦 Inv: {data['inventory_weeks']} wks"
         node_text.append(hover_info)
@@ -336,7 +356,7 @@ def render_network_graph(graph, impacted_products=None, source_node=None):
     # Active nodes will be distinguished by their red color, inactive by grey color
     node_trace = go.Scatter(
         x=node_x, y=node_y, mode='markers+text', textposition="top center",
-        text=[format_entity_name(n) if n in highlighted_nodes or not source_node else "" for n in graph.nodes()],  # Only label active nodes
+        text=[(format_location_name(n) if 'Location' in graph.nodes[n].get('type', '') else format_entity_name(n)) if n in highlighted_nodes or not source_node else "" for n in graph.nodes()],  # Only label active nodes
         textfont=dict(size=9, color='#333'),
         hoverinfo='text', hovertext=node_text,
         marker=dict(showscale=False, color=node_color, size=node_size, line=dict(color='white', width=2))
@@ -455,7 +475,7 @@ def main_control_tower():
                     st.markdown("""
                     **The Zero-Dependency Brain recognizes these key nodes:**
                     
-                    * **Locations:** North Carolina, Rocky Mount, North Cove, New Jersey, Raritan, Mumbai, Rotterdam
+                    * **Locations:** North Carolina, Rocky Mount, North Cove, New Jersey, Mock Town, Mumbai, Rotterdam
                     * **Partners:** Pfizer, Baxter, Janssen, PharmaCorp, India
                     * **Disruptions:** Fire, Tornado, Hurricane, Strike, Floods, Logistics
                     

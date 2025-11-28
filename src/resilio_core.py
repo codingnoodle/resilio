@@ -33,7 +33,7 @@ def build_resilio_graph():
     G = nx.DiGraph()
     
     # --- LOCATIONS ---
-    G.add_node("Raritan_NJ_USA", type="Location", lat=40.57, lon=-74.65)     
+    G.add_node("Mock_Town_NJ_USA", type="Location", lat=40.57, lon=-74.65)     
     G.add_node("North_Cove_NC_USA", type="Location", lat=35.73, lon=-82.00)  
     G.add_node("Rocky_Mount_NC_USA", type="Location", lat=35.93, lon=-77.79) 
     G.add_node("Mumbai_Zone_A", type="Location", lat=19.07, lon=72.87)       
@@ -63,7 +63,7 @@ def build_resilio_graph():
 
     # --- EDGES (Physical Flow) ---
     # Locations -> Entities
-    G.add_edge("Raritan_NJ_USA", "PharmaCorp_A_Internal", relationship="LOCATED_AT", lead_time_days=0)
+    G.add_edge("Mock_Town_NJ_USA", "PharmaCorp_A_Internal", relationship="LOCATED_AT", lead_time_days=0)
     G.add_edge("North_Cove_NC_USA", "PharmaCorp_B_Tier1", relationship="LOCATED_AT", lead_time_days=0)
     G.add_edge("Rocky_Mount_NC_USA", "PharmaCorp_C_Tier1", relationship="LOCATED_AT", lead_time_days=0)
     G.add_edge("Mumbai_Zone_A", "PharmaCorp_D_Tier2", relationship="LOCATED_AT", lead_time_days=0)
@@ -117,11 +117,20 @@ def verify_with_tavily(query):
 def fuzzy_find_entity(query, graph):
     if not query or query == "Unknown": return None
     q = query.lower()
-    if any(kw in q for kw in ["janssen", "raritan", "car-t", "cart", "biotherapy"]): return "PharmaCorp_A_Internal"
+    # Updated: Add location keywords for better matching
+    # Priority order: specific locations first, then generic regions
+    if any(kw in q for kw in ["janssen", "mock town", "car-t", "cart", "biotherapy", "nj", "jersey", "new jersey"]): return "PharmaCorp_A_Internal"
     if "baxter" in q or "north cove" in q or "iv fluid" in q: return "PharmaCorp_B_Tier1"
-    if "pfizer" in q or "rocky mount" in q or "tornado" in q: return "PharmaCorp_C_Tier1"
-    if "india" in q or "mumbai" in q or "factory fire" in q: return "PharmaCorp_D_Tier2"
-    if "rotterdam" in q or "port" in q: return "EU_Logistics"
+    if "pfizer" in q or "rocky mount" in q: return "PharmaCorp_C_Tier1"
+    if "india" in q or "mumbai" in q: return "PharmaCorp_D_Tier2"
+    if "rotterdam" in q or ("port" in q and ("rotterdam" in q or "eu" in q or "netherlands" in q)): return "EU_Logistics"
+    # Fallback: generic location matching (less specific)
+    if "north carolina" in q or ("nc" in q and "carolina" in q):
+        # Default to North Cove (Partner B) if no specific city mentioned
+        if "rocky mount" in q:
+            return "PharmaCorp_C_Tier1"
+        else:
+            return "PharmaCorp_B_Tier1"
     matches = difflib.get_close_matches(query, list(graph.nodes()), n=1, cutoff=0.4)
     return matches[0] if matches else None
 
@@ -212,18 +221,94 @@ def sentinel_agent(state: AgentState):
     
     entity, event = "Unknown", "Unknown"
     
-    # Mock Logic
+    # --- UPDATED MOCK LOGIC: Prioritize Locations before Generic Events ---
     news = state['input_news'].lower()
+    
+    # 1. Prioritize Specific Locations/Partners (check locations first)
     if "pfizer" in news or "rocky mount" in news:
-        entity, event = "PharmaCorp_C_Tier1", "EF3 Tornado (Direct Hit)"
-    elif "baxter" in news or "helene" in news:
-        entity, event = "PharmaCorp_B_Tier1", "Hurricane Flooding"
-    elif "rotterdam" in news:
-        entity, event = "EU_Logistics", "Port Strike"
-    elif "india" in news or "fire" in news:
-        entity, event = "PharmaCorp_D_Tier2", "Factory Fire"
-    elif "janssen" in news or "car-t" in news or "biotherapy" in news:
-        entity, event = "PharmaCorp_A_Internal", "Internal Logistics Failure"
+        entity = "PharmaCorp_C_Tier1"
+        if "tornado" in news:
+            event = "EF3 Tornado (Direct Hit)"
+        elif "hurricane" in news or "flood" in news:
+            event = "Hurricane Flooding"
+        elif "fire" in news:
+            event = "Factory Fire"
+        else:
+            event = "Production Disruption"
+            
+    elif "baxter" in news or "north cove" in news:
+        entity = "PharmaCorp_B_Tier1"
+        if "hurricane" in news or "helene" in news or "flood" in news:
+            event = "Hurricane Flooding"
+        elif "fire" in news:
+            event = "Factory Fire"
+        elif "tornado" in news:
+            event = "Tornado Damage"
+        else:
+            event = "Production Disruption"
+            
+    elif "north carolina" in news or ("nc" in news and "carolina" in news):
+        # Generic North Carolina - check for specific cities
+        if "rocky mount" in news:
+            entity = "PharmaCorp_C_Tier1"
+            if "tornado" in news:
+                event = "EF3 Tornado (Direct Hit)"
+            elif "fire" in news:
+                event = "Factory Fire"
+            elif "hurricane" in news:
+                event = "Hurricane Impact"
+            else:
+                event = "Production Disruption"
+        else:
+            # Default to North Cove (Partner B) for generic NC
+            entity = "PharmaCorp_B_Tier1"
+            if "hurricane" in news or "helene" in news or "flood" in news:
+                event = "Hurricane Flooding"
+            elif "fire" in news:
+                event = "Factory Fire"
+            elif "tornado" in news:
+                event = "Tornado Damage"
+            else:
+                event = "Production Disruption"
+            
+    elif "rotterdam" in news or ("port" in news and "eu" in news):
+        entity = "EU_Logistics"
+        if "strike" in news:
+            event = "Port Strike"
+        elif "fire" in news:
+            event = "Port Facility Fire"
+        elif "hurricane" in news:
+            event = "Severe Weather Disruption"
+        else:
+            event = "Logistics Disruption"
+            
+    elif "nj" in news or "mock town" in news or "janssen" in news or "car-t" in news or "biotherapy" in news or "jersey" in news:
+        entity = "PharmaCorp_A_Internal"
+        if "fire" in news:
+            event = "Internal Facility Fire"
+        elif "hurricane" in news or "flood" in news:
+            event = "Hurricane Impact"
+        elif "tornado" in news:
+            event = "Tornado Damage"
+        elif "logistics" in news or "truck" in news:
+            event = "Internal Logistics Failure"
+        else:
+            event = "Internal Production Disruption"
+    
+    # 2. Fallback to Generic Regions/Types (only if no specific location found)
+    elif "india" in news or "mumbai" in news:
+        entity = "PharmaCorp_D_Tier2"
+        if "fire" in news:
+            event = "Factory Fire"
+        elif "hurricane" in news:
+            event = "Monsoon Flooding"
+        else:
+            event = "Production Disruption"
+            
+    elif "fire" in news:
+        # Generic fire defaults to Tier 2 if no other location found
+        entity = "PharmaCorp_D_Tier2"
+        event = "Factory Fire (Generic)"
         
     real_entity = fuzzy_find_entity(entity, KG)
     if not real_entity: real_entity = fuzzy_find_entity(state['input_news'], KG)
