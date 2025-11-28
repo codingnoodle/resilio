@@ -7,92 +7,349 @@ from datetime import date, timedelta
 import sys
 import os
 import re
+import networkx as nx
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from src.resilio_core import build_workflow, KG
+from src.resilio_core import build_workflow, KG, USE_REAL_LLM
+
+def format_entity_name(entity_name: str) -> str:
+    if not entity_name or entity_name == "None": return "Unknown Entity"
+    entity_display_map = {
+        "PharmaCorp_A_Internal": "PharmaCorp A (Internal)",
+        "PharmaCorp_B_Tier1": "PharmaCorp B (Tier 1 Partner)",
+        "PharmaCorp_C_Tier1": "PharmaCorp C (Tier 1 Partner)",
+        "PharmaCorp_D_Tier2": "PharmaCorp D (Tier 2 Partner)",
+        "EU_Logistics": "EU Logistics",
+        "BioTherapy_Raw": "BioTherapy Precursor",
+        "API_Generic_Raw": "Generic API Raw Material",
+        "Viral_Vector_Raw": "BioTherapy Precursor",
+    }
+    if entity_name in entity_display_map: return entity_display_map[entity_name]
+    formatted = entity_name.replace("_", " ").title()
+    for old, new in {'Nj': 'NJ', 'Nc': 'NC', 'Usa': 'USA', 'Eu': 'EU'}.items():
+        formatted = formatted.replace(old, new)
+    return formatted
+
+def format_product_name(product_name: str) -> str:
+    if not product_name: return "Unknown"
+    # Map to display names
+    product_display_map = {
+        "Product_X_BioTherapy": "Product X BioTherapy",
+        "Product_Y_Sterile": "Product Y Sterile",
+        "Product_Z_Commodity": "Product Z Commodity"
+    }
+    if product_name in product_display_map:
+        return product_display_map[product_name]
+    return product_name.replace("_", " ").title()
+
+def metric_card(label, value, delta=None, delta_color="normal"):
+    delta_html = ""
+    if delta:
+        color = "#2ca02c" if delta_color == "normal" else "#d62728"
+        if delta_color == "inverse": color = "#d62728"
+        delta_html = f"<span style='font-size: 0.8rem; color: {color};'>{delta}</span>"
+    
+    st.markdown(f"""
+    <div style="border: 1px solid #e6e6e6; border-radius: 5px; padding: 10px; margin-bottom: 10px; background-color: #ffffff;">
+        <div style="font-size: 0.8rem; color: #666;">{label}</div>
+        <div style="font-size: 1.1rem; font-weight: 600; line-height: 1.2; margin-top: 4px;">{value}</div>
+        <div style="margin-top: 4px;">{delta_html}</div>
+    </div>
+    """, unsafe_allow_html=True)
 
 def plot_sankey(state):
-    """
-    Renders flow based on the ACTUAL graph traversal in state.
-    """
     details = state['risk_calculations'].get('details', {})
-    if not details: 
-        # Return empty figure if no risk found
-        return go.Figure().update_layout(title="No Impact Detected")
+    if not details: return go.Figure().update_layout(title="No Impact Detected")
     
-    # 1. Build Nodes List
-    # We need: Event -> Supplier -> Product -> Loss
-    # We know the Supplier from state['detected_entity']
     supplier = state['detected_entity']
     event = state['detected_event']
     
-    label_list = [event, supplier]
-    product_list = list(details.keys())
-    label_list.extend(product_list)
-    label_list.append("Financial Loss")
+    def product_sort_key(name):
+        if '_X_' in name: return 0
+        if '_Y_' in name: return 1
+        return 2
     
-    # Create map of label -> index
+    product_list = sorted(details.keys(), key=product_sort_key)
+    label_list = [event, supplier] + product_list + ["Financial Loss"]
     label_map = {name: i for i, name in enumerate(label_list)}
     
     sources, targets, values, colors = [], [], [], []
     
-    # Link 1: Event -> Supplier
-    sources.append(label_map[event])
-    targets.append(label_map[supplier])
-    values.append(10)  # Fixed visual width
-    colors.append("lightgrey")
+    # Event -> Supplier
+    sources.append(label_map[event]); targets.append(label_map[supplier]); values.append(10); colors.append("lightgrey")
     
-    # Link 2: Supplier -> Products
     for prod in product_list:
-        sources.append(label_map[supplier])
-        targets.append(label_map[prod])
-        values.append(5)
-        
-        # Color red if inventory gap exists
+        sources.append(label_map[supplier]); targets.append(label_map[prod]); values.append(5)
         is_risk = details[prod]['days_uncovered_avg'] > 0
         colors.append("rgba(255, 50, 50, 0.8)" if is_risk else "rgba(50, 200, 50, 0.4)")
-        
-        # Link 3: Product -> Loss (only if risky)
         if is_risk:
-            sources.append(label_map[prod])
-            targets.append(label_map["Financial Loss"])
-            # Scale the line width by loss amount
+            sources.append(label_map[prod]); targets.append(label_map["Financial Loss"])
             values.append(max(1, details[prod]['loss_p50'] / 100000))
             colors.append("rgba(200, 0, 0, 0.8)")
 
-    # Replace underscores with spaces for better readability in diagram
-    wrapped_labels = [label.replace('_', ' ') if '_' in label else label for label in label_list]
+    wrapped_labels = []
+    for label in label_list:
+        if label == supplier: wrapped_labels.append(format_entity_name(label))
+        elif label in product_list: wrapped_labels.append(format_product_name(label))
+        else: wrapped_labels.append(label)
     
     fig = go.Figure(data=[go.Sankey(
-        node=dict(
-            pad=20,  # Increased padding for longer names
-            thickness=25,  # Slightly thicker for better visibility
-            line=dict(color="black", width=0.5), 
-            label=wrapped_labels,  # Use labels with spaces instead of underscores
-            hovertemplate='%{label}<extra></extra>'  # Show full name on hover
-        ),
-        link=dict(source=sources, target=targets, value=values, color=colors)
-    )])
-    # Increase height and font size for better label visibility
-    fig.update_layout(
-        title="<b>Live Risk Contagion Path</b>", 
-        height=450,  # Increased height for better label visibility
-        font=dict(size=11)
-    )
+        node=dict(pad=20, thickness=20, line=dict(color="black", width=0.5), label=wrapped_labels, hovertemplate='%{label}<extra></extra>'),
+        link=dict(source=sources, target=targets, value=values, color=colors))])
+    fig.update_layout(title="<b>Live Risk Contagion Path</b>", height=400, margin=dict(l=10,r=10,t=40,b=10))
     return fig
 
 def plot_risk_ranges(state):
     details = state['risk_calculations'].get('details', {})
     if not details: return go.Figure()
     
-    prods = list(details.keys())
+    def product_sort_key(name):
+        if '_X_' in name: return 0
+        if '_Y_' in name: return 1
+        return 2
+    
+    prods = sorted(details.keys(), key=product_sort_key)
+    prod_labels = [format_product_name(p) for p in prods]
     p50 = [details[p]['loss_p50'] for p in prods]
+    p5 = [details[p]['loss_p5'] for p in prods]
     p95 = [details[p]['loss_p95'] for p in prods]
     
     fig = go.Figure()
-    fig.add_trace(go.Bar(x=prods, y=p50, name="Expected Loss", marker_color='indianred'))
-    fig.add_trace(go.Scatter(x=prods, y=p95, mode='markers', marker=dict(symbol='line-ns-open', size=10, color='black'), name="Worst Case (P95)"))
-    fig.update_layout(title="<b>Probabilistic Forecast (95% CI)</b>", yaxis_title="USD Loss", height=300)
+    
+    # Vertical chart: products on x-axis, loss on y-axis
+    # Add vertical lines (range bars) from P5 to P95
+    for i, p in enumerate(prods):
+        fig.add_trace(go.Scatter(
+            x=[prod_labels[i], prod_labels[i]], 
+            y=[p5[i], p95[i]], 
+            mode='lines', 
+            line=dict(color='black', width=3), 
+            showlegend=False, 
+            hoverinfo='skip'
+        ))
+    
+    # Add markers: Worst Case (P95) at top, Expected (P50) in middle, Best Case (P5) at bottom
+    # Order matters for legend: add in reverse order so Worst Case appears at top of legend
+    fig.add_trace(go.Scatter(
+        x=prod_labels, 
+        y=p95, 
+        mode='markers', 
+        marker=dict(symbol='triangle-down', size=12, color='black'), 
+        name="Worst Case (P95)"
+    ))
+    fig.add_trace(go.Scatter(
+        x=prod_labels, 
+        y=p50, 
+        mode='markers', 
+        marker=dict(size=14, color='indianred'), 
+        name="Expected (P50)"
+    ))
+    fig.add_trace(go.Scatter(
+        x=prod_labels, 
+        y=p5, 
+        mode='markers', 
+        marker=dict(symbol='triangle-up', size=12, color='black'), 
+        name="Best Case (P5)"
+    ))
+    
+    fig.update_layout(
+        title=dict(text="<b>Probabilistic Forecast (95% CI)</b>", x=0, xanchor='left'),  # Left-aligned title
+        xaxis_title="Product",
+        yaxis_title="USD Loss",
+        height=350, 
+        margin=dict(l=10, r=120, t=40, b=10),  # Increased right margin for vertical legend
+        legend=dict(
+            orientation="v",  # Vertical orientation
+            x=1.02,  # Position on the right
+            y=1,  # Top of the plot
+            xanchor='left',  # Anchor to left edge of legend
+            yanchor='top'  # Anchor to top
+        )
+    )
+    return fig
+
+def render_network_graph(graph, impacted_products=None, source_node=None):
+    # Layout Logic
+    for node, data in graph.nodes(data=True):
+        ntype = data.get('type', 'Unknown')
+        if ntype == 'Location': graph.nodes[node]['layer'] = 0
+        elif any(x in ntype for x in ['Partner', 'Supplier', 'Internal', 'Logistics']): graph.nodes[node]['layer'] = 1
+        elif 'Ingredient' in ntype: graph.nodes[node]['layer'] = 2
+        elif 'Product' in ntype: graph.nodes[node]['layer'] = 3
+        else: graph.nodes[node]['layer'] = 4
+    
+    pos = nx.multipartite_layout(graph, subset_key='layer', scale=2)
+    
+    # Path Highlighting Logic
+    highlighted_edges = set()
+    highlighted_nodes = set()
+    root_location = None
+    
+    if source_node:
+        highlighted_nodes.add(source_node)
+        # 1. Location -> Supplier
+        predecessors = list(graph.predecessors(source_node))
+        for pred in predecessors:
+            if graph.nodes[pred].get('type') == 'Location':
+                highlighted_edges.add((pred, source_node))
+                root_location = pred
+                highlighted_nodes.add(pred)
+                break
+        
+        # 2. Supplier -> Products (Shortest Path)
+        if impacted_products:
+            for prod in impacted_products:
+                try:
+                    path = nx.shortest_path(graph, source=source_node, target=prod)
+                    for i in range(len(path)-1): 
+                        highlighted_edges.add((path[i], path[i+1]))
+                        highlighted_nodes.add(path[i])
+                        highlighted_nodes.add(path[i+1])
+                except: pass
+
+    # Build Traces
+    edge_x, edge_y, highlight_x, highlight_y = [], [], [], []
+    highlight_hover_x, highlight_hover_y, highlight_hover_text = [], [], []  # Hover for highlighted edges
+    mid_x, mid_y, mid_text = [], [], []  # For Hover on non-highlighted edges
+
+    # Determine if we're in "active scenario" mode (case selected)
+    is_active_scenario = source_node is not None
+
+    for edge in graph.edges():
+        x0, y0 = pos[edge[0]]; x1, y1 = pos[edge[1]]
+        data = graph.get_edge_data(edge[0], edge[1])
+        lead = data.get('lead_time_days', 0)
+        
+        # Determine if edge is active (part of disruption path)
+        is_active = edge in highlighted_edges
+        
+        # Clean names for tooltip
+        src_name = format_entity_name(edge[0])
+        tgt_name = format_entity_name(edge[1])
+        
+        # Contextual tooltip: show IMPACT PATH for active edges
+        status_text = "⚠️ <b>IMPACT PATH</b>" if is_active else "Standard Flow"
+        
+        # Contextual Labeling: Specific text for Location edges
+        source_type = graph.nodes[edge[0]].get('type', 'Unknown')
+        if source_type == 'Location':
+            # Location -> Supplier edges: explain why 0 days
+            time_info = "<b>Status:</b> Site Located Here<br><b>Lead Time:</b> 0 Days (Static)"
+        else:
+            # Other edges: show lead time with bold formatting
+            time_info = f"<b>Lead Time:</b> {lead} Days"
+        
+        tooltip_text = f"{status_text}<br>{src_name} → {tgt_name}<br>{time_info}"
+
+        # Visuals
+        if is_active:
+            # Highlighted path (red, thick) - only when scenario is active
+            highlight_x.extend([x0, x1, None]); highlight_y.extend([y0, y1, None])
+            # Add hover markers at midpoint for highlighted edges (separate trace for better interaction)
+            mx, my = (x0 + x1) / 2, (y0 + y1) / 2
+            highlight_hover_x.append(mx)
+            highlight_hover_y.append(my)
+            highlight_hover_text.append(tooltip_text)
+        else:
+            # Non-highlighted edges
+            source_type = graph.nodes[edge[0]].get('type', '')
+            target_type = graph.nodes[edge[1]].get('type', '')
+            # Filter product-product edges to reduce clutter (only in active scenario)
+            if is_active_scenario:
+                # In active scenario: show faint edges for non-impacted paths (exclude product-product)
+                if not ('Product' in source_type and 'Product' in target_type):
+                    edge_x.extend([x0, x1, None]); edge_y.extend([y0, y1, None])
+                    # Add hover markers for non-highlighted edges
+                    mx, my = (x0 + x1) / 2, (y0 + y1) / 2
+                    mid_x.append(mx)
+                    mid_y.append(my)
+                    mid_text.append(tooltip_text)
+            else:
+                # No scenario selected: show ALL edges in normal color for full visibility
+                if not ('Product' in source_type and 'Product' in target_type):
+                    edge_x.extend([x0, x1, None]); edge_y.extend([y0, y1, None])
+                    # Add hover markers for all edges when no scenario
+                    mx, my = (x0 + x1) / 2, (y0 + y1) / 2
+                    mid_x.append(mx)
+                    mid_y.append(my)
+                    mid_text.append(tooltip_text)
+
+    # Edge styling based on scenario state
+    if is_active_scenario:
+        # Faint Background Edges (non-impacted)
+        edge_trace = go.Scatter(x=edge_x, y=edge_y, line=dict(width=1, color='#eee'), hoverinfo='none', mode='lines')
+    else:
+        # Normal Edges (all visible, no scenario selected)
+        edge_trace = go.Scatter(x=edge_x, y=edge_y, line=dict(width=1, color='#ccc'), hoverinfo='none', mode='lines')
+    
+    # Active Path Edges (Red) - only shown when scenario is active
+    highlight_trace = go.Scatter(x=highlight_x, y=highlight_y, line=dict(width=3, color='red'), hoverinfo='none', mode='lines')
+    
+    # Separate hover trace for highlighted edges (on top, larger size for easy interaction)
+    highlight_hover_trace = go.Scatter(
+        x=highlight_hover_x, y=highlight_hover_y, mode='markers', text=highlight_hover_text, hoverinfo='text',
+        marker=dict(size=30, color='rgba(0,0,0,0)'), showlegend=False,  # Large invisible markers for highlighted edges
+        hovertemplate='%{text}<extra></extra>'
+    )
+    
+    # Hover markers for non-highlighted edges
+    edge_hover_trace = go.Scatter(
+        x=mid_x, y=mid_y, mode='markers', text=mid_text, hoverinfo='text',
+        marker=dict(size=25, color='rgba(0,0,0,0)'), showlegend=False,  # Invisible markers for standard edges
+        hovertemplate='%{text}<extra></extra>'
+    )
+    
+    node_x, node_y, node_text, node_color, node_size = [], [], [], [], []
+    color_map = {'Location': '#1f77b4', 'Supplier': '#2ca02c', 'Product': '#ff7f0e', 'Ingredient': '#9467bd'}
+
+    for node in graph.nodes():
+        x, y = pos[node]; node_x.append(x); node_y.append(y)
+        data = graph.nodes[node]; ntype = data.get('type', 'Unknown')
+        
+        # Color Logic: Grey out if not in path (only when scenario is active)
+        if not source_node:  # No scenario selected: all nodes colorful
+            is_active = True
+        else:
+            # Scenario active: only highlighted nodes are colorful
+            is_active = node in highlighted_nodes
+            
+        base_c = '#gray'
+        if 'Location' in ntype: base_c = color_map['Location']
+        elif any(x in ntype for x in ['Partner', 'Supplier', 'Internal', 'Logistics']): base_c = color_map['Supplier']
+        elif 'Product' in ntype: base_c = color_map['Product']
+        elif 'Ingredient' in ntype: base_c = color_map['Ingredient']
+        
+        final_c = base_c if is_active else '#f0f0f0'  # Fade out
+        if node == source_node or node == root_location: final_c = 'red'  # Root cause
+        
+        node_color.append(final_c)
+        
+        hover_info = f"<b>{format_entity_name(node)}</b><br>{ntype}"
+        if 'revenue_annual' in data: hover_info += f"<br>💰 Rev: ${data['revenue_annual']:,.0f}"
+        if 'inventory_weeks' in data: hover_info += f"<br>📦 Inv: {data['inventory_weeks']} wks"
+        node_text.append(hover_info)
+        size = 15
+        if 'Product' in ntype: size = 15 + (data.get('revenue_annual', 0) / 100_000_000)
+        node_size.append(min(size, 40))
+    
+    # Use a single line style for all markers (Plotly doesn't support per-marker line styles)
+    # Active nodes will be distinguished by their red color, inactive by grey color
+    node_trace = go.Scatter(
+        x=node_x, y=node_y, mode='markers+text', textposition="top center",
+        text=[format_entity_name(n) if n in highlighted_nodes or not source_node else "" for n in graph.nodes()],  # Only label active nodes
+        textfont=dict(size=9, color='#333'),
+        hoverinfo='text', hovertext=node_text,
+        marker=dict(showscale=False, color=node_color, size=node_size, line=dict(color='white', width=2))
+    )
+    
+    # Order matters: hover traces should be on top for better interaction
+    # Put hover traces last so they're on top and clickable
+    fig = go.Figure(data=[edge_trace, highlight_trace, highlight_hover_trace, edge_hover_trace, node_trace],
+                    layout=go.Layout(
+                        title='<b>Global Supply Chain Digital Twin</b>', showlegend=False,
+                        hovermode='closest', margin=dict(b=20, l=5, r=5, t=40),
+                        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False), height=500))
     return fig
 
 def plot_workflow_diagram():
@@ -134,20 +391,6 @@ def plot_workflow_diagram():
         else:
             st.info("💡 **To add the workflow diagram:** Save your workflow diagram as `workflow_diagram.svg` or `workflow_diagram.png` in the `ui/` folder")
             st.info("Workflow Architecture: START → Sentinel → Detective → Quantifier → Strategist → Auditor → (Approved → END | Retry → Sentinel)")
-            
-            # Provide Mermaid code for reference if user wants to regenerate the image
-            with st.expander("📋 Mermaid Code (for regenerating PNG at mermaid.live)"):
-                st.code("""graph TD
-    Start((START)) --> Sentinel[📡 Sentinel]
-    Sentinel --> Detective[🕵️ Detective]
-    Detective --> Quantifier[🧮 Quantifier]
-    Quantifier --> Strategist[🧠 Strategist]
-    Strategist --> Auditor{⚖️ Auditor}
-    Auditor -- "✅ Approved" --> End((END))
-    Auditor -- "❌ Rejected" --> Sentinel
-    
-    style Auditor fill:#ffcccc
-    style Sentinel fill:#ccffcc""", language="text")
     
     with col2:
         # Show detailed description
@@ -185,189 +428,108 @@ def plot_workflow_diagram():
 def main_control_tower():
     st.set_page_config(page_title="Resilio Control Tower", layout="wide")
     st.markdown("## 🛡️ RESILIO: Supply Chain Control Tower")
+    if USE_REAL_LLM: st.caption("🟢 **ONLINE:** Connected to Gemini + Tavily + NASA.")
+    else: st.caption("🔒 **ZERO-DEPENDENCY MODE:** Running deterministic mock engine.")
     st.markdown("---")
     
-    # Add workflow diagram section at the top
-    with st.expander("🔄 View Multi-Agent Workflow", expanded=False):
-        plot_workflow_diagram()
-
-    # 1. SCENARIO SELECTOR
-    with st.sidebar:
+    col_graph, col_controls = st.columns([2, 1])
+    with col_controls:
         st.header("⚡ Scenario Injection")
         scenario = st.radio(
-            "Inject Live Event:",
+            "Select Case Study:",
             [
                 "Custom Input...",
-                "🔥 Fire at PharmaCorp (India)",
-                "🌀 Hurricane in North Carolina (USA)",
-                "🚢 Port Strike in Rotterdam (EU)",
-                "🛑 FDA Warning for PharmaCorp"
+                "🧬 Internal: BioTherapy Logistics",
+                "💧 Partner B: IV Fluid Crisis",
+                "🌪️ Partner C: Tornado Hit",
+                "🔥 Partner D: Factory Fire"
             ]
         )
         
         if scenario == "Custom Input...":
-            news_input = st.text_area("Enter News Headline:", height=100)
-        elif "Fire" in scenario:
-            news_input = "BREAKING: Large fire reported at PharmaCorp facility in Mumbai industrial zone."
-        elif "Hurricane" in scenario:
-            news_input = "Hurricane Helene projected to hit North Carolina logistics hubs in USA."
-        elif "Rotterdam" in scenario:
-            news_input = "Labor union announces strike at Rotterdam Port in Netherlands, halting pharma exports."
-        else:
-            news_input = "FDA issues warning letter to PharmaCorp India regarding quality control."
+            news_input = st.text_area("Headline:", height=100)
             
+            # Simulation Guide for Zero-Dependency Mode
+            if not USE_REAL_LLM:
+                with st.expander("ℹ️ Simulation Guide: Valid Inputs", expanded=False):
+                    st.markdown("""
+                    **The Zero-Dependency Brain recognizes these key nodes:**
+                    
+                    * **Locations:** North Carolina, Rocky Mount, North Cove, New Jersey, Raritan, Mumbai, Rotterdam
+                    * **Partners:** Pfizer, Baxter, Janssen, PharmaCorp, India
+                    * **Disruptions:** Fire, Tornado, Hurricane, Strike, Floods, Logistics
+                    
+                    **Example inputs:**
+                    - "Severe flooding impacts Baxter facility in North Carolina."
+                    - "Fire reported at facility in Mumbai."
+                    - "Tornado strikes Rocky Mount, NC facility."
+                    - "Port strike in Rotterdam halts exports."
+                    - "Logistics disruption: Cryogenic delivery truck for BioTherapy delayed."
+                    """)
+        elif "Internal" in scenario: news_input = "Logistics disruption: Cryogenic delivery truck for BioTherapy delayed."
+        elif "Partner B" in scenario: news_input = "Hurricane Helene floods North Cove, NC facility. Critical IV Fluid shortage."
+        elif "Partner C" in scenario: news_input = "EF3 Tornado strikes Rocky Mount, NC facility. Warehouse roof torn off."
+        elif "Partner D" in scenario: news_input = "Fire reported at facility in Mumbai."
+        
         run_btn = st.button("▶️ RUN AGENT", type="primary")
 
-    # 2. EXECUTION
-    if 'result' not in st.session_state:
-        st.session_state['result'] = None
-
+    if 'result' not in st.session_state: st.session_state['result'] = None
     if run_btn:
         with st.spinner("🤖 Sentinel Agent mapping global graph..."):
-            # Always rebuild workflow to avoid caching issues
-            app = build_workflow()
-            # Increase recursion limit and handle errors
             try:
-                # Use configurable recursion limit, but workflow should always terminate
-                result = app.invoke(
-                    {"input_news": news_input},
-                    config={"recursion_limit": 15}  # Increased for complex scenarios
-                )
-                # Validate result before storing
-                if result and isinstance(result, dict):
-                    st.session_state['result'] = result
-                    st.session_state['last_result'] = result  # Store for fallback
-                else:
-                    st.error("❌ Workflow returned invalid result")
-                    st.session_state['result'] = st.session_state.get('last_result', None)
-            except Exception as e:
-                error_msg = str(e)
-                st.error(f"❌ Error during analysis: {error_msg}")
-                # If recursion error, show helpful message
-                if "Recursion limit" in error_msg:
-                    st.warning("⚠️ Workflow encountered an unexpected loop. This may indicate a configuration issue.")
-                    st.info("💡 Try a different input or check the console for details.")
-                # Use last successful result as fallback
-                st.session_state['result'] = st.session_state.get('last_result', None)
-                # Show traceback in expander for debugging
-                with st.expander("🔍 Debug Details"):
-                    import traceback
-                    st.code(traceback.format_exc())
-
-    # 3. RENDER
+                app = build_workflow()
+                st.session_state['result'] = app.invoke({"input_news": news_input})
+            except Exception as e: st.error(f"Error: {e}")
+    
     result = st.session_state.get('result')
     
-    if not result:
-        st.info("👈 Select a scenario and click RUN to start.")
-        return
+    with col_graph:
+        detected_node = result.get('detected_entity') if result else None
+        rc_temp = result.get('risk_calculations', {}) if result else {}
+        impacted_prods = list(rc_temp.get('details', {}).keys()) if rc_temp else []
+        with st.expander("🌍 Global Knowledge Graph (Digital Twin)", expanded=True):
+            st.plotly_chart(render_network_graph(KG, impacted_prods, detected_node), use_container_width=True)
+        
+        # Add workflow diagram below knowledge graph (always visible)
+        with st.expander("🔄 Multi-Agent Workflow", expanded=False):
+            plot_workflow_diagram()
 
-    # AUDITOR CHECK
+    if not result: return
     audit = result.get('audit_report')
-    if audit and hasattr(audit, 'is_safe_to_present') and not audit.is_safe_to_present:
-        st.error("🛑 **BLOCKED BY AUDITOR:** Event could not be grounded to Knowledge Graph.")
-        return
-
-    # KPIS - Get risk calculations with error handling
+    if audit and hasattr(audit, 'is_safe_to_present') and not audit.is_safe_to_present: st.error("🛑 **BLOCKED BY AUDITOR**"); return
+    
     rc = result.get('risk_calculations', {})
-    if not rc or not isinstance(rc, dict):
-        # Show partial results even if risk calculations are missing
-        st.warning("⚠️ No risk calculations available. Entity: {}, Products: {}".format(
-            result.get('detected_entity', 'Unknown'), result.get('impacted_products', [])))
-        # Still show what we have
-        k1, k2 = st.columns(2)
-        k1.metric("💥 Event", result.get('detected_event', 'Unknown'))
-        with k2:
-            st.markdown("**📍 Entity**")
-            entity_name = result.get('detected_entity', 'Unknown')
-            st.write(entity_name if entity_name else "Unknown")
-        # Show debug info
-        with st.expander("🔍 Debug: Full Result"):
-            st.json(result)
-        return
     
-    k1, k2, k3, k4 = st.columns(4)
-    # Ensure event is not None
-    event_name = result.get('detected_event') or 'Unknown'
-    if event_name == 'None':
-        event_name = 'Unknown'
-    k1.metric("💥 Event", event_name)
-    # Display entity with full name - use container to prevent truncation
-    with k2:
-        st.markdown("**📍 Entity**")
-        entity_name = result.get('detected_entity') or 'Unknown'
-        if entity_name == 'None':
-            entity_name = 'Unknown'
-        st.write(entity_name)
+    st.markdown("### 🚨 Live Risk Assessment")
+    k1, k2, k3, k4, k5 = st.columns(5)
     
-    # Financial Risk with Range (P5-P95) - Convert to float to handle numpy types
-    total_p5 = float(rc.get('total_p5', 0) or 0)
-    total_expected = float(rc.get('total_expected', 0) or 0)
-    total_p95 = float(rc.get('total_p95', 0) or 0)
-    
-    if total_expected > 0:
-        risk_range = f"${total_p5:,.0f} - ${total_p95:,.0f}"
-        k3.metric("💰 Financial Risk (Range)", f"${total_expected:,.0f}", delta=f"Range: {risk_range}", delta_color="inverse")
-    else:
-        k3.metric("💰 Financial Risk", "$0", delta="No impact")
-    
-    # Inventory Gap with Range
+    total_p5 = rc.get('total_p5', 0); total_p95 = rc.get('total_p95', 0)
     details = rc.get('details', {})
+    
     if details:
-        # Calculate range of days uncovered across all products - Convert to float
-        days_list = [float(d.get('days_uncovered_avg', 0) or 0) for d in details.values() if float(d.get('days_uncovered_avg', 0) or 0) > 0]
-        if days_list:
-            max_gap = max(days_list)
-            min_gap = min(days_list) if len(days_list) > 1 else max_gap
-            if max_gap > 0:
-                gap_range = f"{min_gap:.0f}-{max_gap:.0f}" if min_gap != max_gap else f"{max_gap:.0f}"
-                k4.metric("⏳ Inventory Gap (Days)", f"{max_gap:.0f}", delta=f"Range: {gap_range} days", delta_color="inverse")
-            else:
-                k4.metric("⏳ Inventory Gap", "0 Days", delta="Covered")
-        else:
-            k4.metric("⏳ Inventory Gap", "0 Days", delta="No gap")
+        dis_p5 = max([d.get('disruption_p5', 0) for d in details.values()])
+        dis_p95 = max([d.get('disruption_p95', 0) for d in details.values()])
+        gap_p5 = max([d.get('gap_p5', 0) for d in details.values()])
+        gap_p95 = max([d.get('gap_p95', 0) for d in details.values()])
+        avg_inv = np.mean([d.get('inventory_days', 0) for d in details.values()])
     else:
-        k4.metric("⏳ Inventory Gap", "N/A", delta="No data")
+        dis_p5=0; dis_p95=0; gap_p5=0; gap_p95=0; avg_inv=0
 
-    # DETAILED RANGE INFORMATION
-    details = rc.get('details', {})
-    if details:
-        with st.expander("📊 Detailed Risk Breakdown (P5-P95 Ranges)", expanded=False):
-            for prod, prod_details in details.items():
-                st.markdown(f"**{prod}**")
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    loss_p50 = float(prod_details.get('loss_p50', 0) or 0)
-                    loss_p5 = float(prod_details.get('loss_p5', 0) or 0)
-                    loss_p95 = float(prod_details.get('loss_p95', 0) or 0)
-                    st.metric("Financial Loss Range", 
-                             f"${loss_p50:,.0f}",
-                             delta=f"${loss_p5:,.0f} - ${loss_p95:,.0f}",
-                             delta_color="inverse")
-                with col2:
-                    disruption_avg = float(prod_details.get('disruption_days_avg', 0) or 0)
-                    st.metric("Disruption Duration", f"{disruption_avg:.1f} days", 
-                             delta=f"±7 days (Monte Carlo)")
-                with col3:
-                    gap_avg = float(prod_details.get('days_uncovered_avg', 0) or 0)
-                    inv_days = float(prod_details.get('inventory_days', 0) or 0)
-                    st.metric("Inventory Gap", f"{gap_avg:.1f} days",
-                             delta=f"Out of {inv_days:.0f} days coverage")
-                st.markdown("---")
+    with k1: metric_card("💥 Event", result.get('detected_event', 'Unknown'))
+    with k2: metric_card("📍 Entity", format_entity_name(result.get('detected_entity')))
+    with k3: metric_card("💰 Revenue Risk (95% CI)", f"${total_p5/1e6:.1f}M - ${total_p95/1e6:.1f}M", delta="Probabilistic Forecast", delta_color="inverse")
+    with k4: metric_card("⏱️ Disruption Duration", f"{dis_p5:.1f} - {dis_p95:.1f} Days", delta=f"Vs. {avg_inv:.0f} Days Inventory", delta_color="normal")
+    with k5: metric_card("⏳ Net Gap", f"{gap_p5:.1f} - {gap_p95:.1f} Days", delta="Uncovered" if gap_p95 > 0 else "Fully Covered", delta_color="inverse" if gap_p95 > 0 else "normal")
 
-    # VISUALS
     st.plotly_chart(plot_sankey(result), use_container_width=True)
-    
     c1, c2 = st.columns(2)
     with c1: st.plotly_chart(plot_risk_ranges(result), use_container_width=True)
     with c2: 
         st.success(f"🤖 **STRATEGIST:** {result.get('recommended_action')}", icon="🛡️")
-        
-        # AUDITOR SCORECARD
-        st.markdown("---")
         st.caption("⚖️ **AUDITOR VALIDATION LOG**")
         col_a, col_b = st.columns(2)
-        col_a.info(f"Hallucination Check: {'PASS' if audit.hallucination_check else 'FAIL'}")
-        col_b.info(f"Math Integrity Check: {'PASS' if audit.math_check else 'FAIL'}")
+        col_a.info(f"Hallucination: {'PASS' if audit.hallucination_check else 'FAIL'}")
+        col_b.info(f"Math Integrity: {'PASS' if audit.math_check else 'FAIL'}")
 
 if __name__ == "__main__":
     main_control_tower()
