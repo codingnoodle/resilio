@@ -22,6 +22,21 @@ USE_REAL_LLM = True
 DEFAULT_DISRUPTION_DAYS = 60 
 np.random.seed(42)
 
+# Initialize Gemini 2.5 Flash for performance
+if USE_REAL_LLM:
+    try:
+        if UserSecretsClient:
+            os.environ["GOOGLE_API_KEY"] = UserSecretsClient().get_secret("GOOGLE_API_KEY")
+        if os.environ.get("GOOGLE_API_KEY"):
+            llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.1)
+        else:
+            llm = None
+    except Exception as e:
+        print(f"⚠️ Warning: Could not initialize Gemini LLM: {e}")
+        llm = None
+else:
+    llm = None
+
 # ==========================================
 # 1. KNOWLEDGE GRAPH (Tuned for High Impact Demo)
 # ==========================================
