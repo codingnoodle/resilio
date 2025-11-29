@@ -228,19 +228,34 @@ Set `USE_REAL_LLM = True` and ensure API keys are set. The system will use:
 
 ## 🧪 Testing & Validation
 
-Run the automated test suite to verify the Anti-Hallucination Guardrails:
+Resilio includes a comprehensive test suite (`src/testing.py`) that validates the core reliability mechanisms. These tests are **critical for enterprise adoption** because they ensure the system won't hallucinate entities or produce incorrect financial calculations.
+
+### Why These Tests Matter
+
+In a production supply chain system, **false positives are costly** (unnecessary alerts) and **false negatives are dangerous** (missed disruptions). The test suite validates:
+
+1. **Entity Grounding** - Ensures location keywords (e.g., "Mumbai", "NJ") correctly map to the right supplier nodes in the knowledge graph
+2. **Location-Priority Logic** - Verifies that specific locations are prioritized over generic event types (e.g., "NJ fire" maps to New Jersey, not Mumbai)
+3. **Probabilistic Math Integrity** - Confirms that Monte Carlo simulations produce valid ranges (P95 > P50 > P5)
+4. **Hallucination Prevention** - Rejects unknown entities (e.g., "Explosion at Wonka Factory") to prevent false alerts
+5. **Scenario Coverage** - Validates complex scenarios like Internal BioTherapy Logistics disruptions
+6. **Multi-Event Detection** - Ensures the same location can correctly detect different event types (fire, hurricane, tornado)
+
+### Running the Tests
 
 ```bash
 python src/testing.py
 ```
 
-**Test Coverage:**
+**Expected Output:** All 6 tests should pass in ~2 seconds, confirming:
 - ✅ Entity grounding (fuzzy matching)
 - ✅ Location-priority logic
 - ✅ Probabilistic math integrity
 - ✅ Hallucination prevention
 - ✅ Internal BioTherapy scenario
 - ✅ Multiple event types per location
+
+These tests serve as **regression guards** during development and provide confidence that the system maintains its reliability as new features are added.
 
 ---
 
