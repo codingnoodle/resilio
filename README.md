@@ -308,7 +308,7 @@ resilio/
 
 ## 📚 Citations & Data Sources
 
-- **Supply Chain Data**: Synthetic ontology modeled after the FDA Drug Safety Communication: Rocky Mount Tornado Damage (`https://www.fda.gov/media/170647/download`)
+- **Supply Chain Data**: Synthetic ontology modeled after the FDA Drug Safety Communication: Rocky Mount Tornado Damage ([FDA Drug Safety Communication](https://www.fda.gov/media/170647/download))
 - **Satellite Data**: [NASA Earth Observatory Natural Event Tracker (EONET) API](https://eonet.gsfc.nasa.gov/)
 - **Search**: [Tavily AI](https://tavily.com/) for agent-optimized web search
 - **LLM**: [Google Gemini 2.5 Flash](https://ai.google.dev/models/gemini) via LangChain
