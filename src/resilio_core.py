@@ -10,11 +10,6 @@ from langchain_community.tools.tavily_search import TavilySearchResults
 from pydantic import BaseModel, Field
 from langgraph.graph import StateGraph, END
 
-# Handle Kaggle Secrets vs Local Environment
-try:
-    from kaggle_secrets import UserSecretsClient
-except ImportError:
-    UserSecretsClient = None
 
 # --- CONFIGURATION ---
 # Set to True to enable real LLM (Gemini + Tavily + NASA)
@@ -25,8 +20,6 @@ np.random.seed(42)
 # Initialize Gemini 2.5 Flash for performance
 if USE_REAL_LLM:
     try:
-        if UserSecretsClient:
-            os.environ["GOOGLE_API_KEY"] = UserSecretsClient().get_secret("GOOGLE_API_KEY")
         if os.environ.get("GOOGLE_API_KEY"):
             llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.1)
         else:
@@ -122,8 +115,6 @@ def check_nasa_eonet(category="Wildfires"):
 
 def verify_with_tavily(query):
     try:
-        if UserSecretsClient: 
-            os.environ["TAVILY_API_KEY"] = UserSecretsClient().get_secret("TAVILY_API_KEY")
         if os.environ.get("TAVILY_API_KEY"):
             return f"Tavily: Found {len(TavilySearchResults(max_results=2).invoke(query))} sources."
     except: pass
