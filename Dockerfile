@@ -17,8 +17,6 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy source code
 COPY src/ ./src
 COPY ui/ ./ui
-# Copy banner image if referenced in dashboard (optional, for completeness)
-COPY resilio_banner.png ./resilio_banner.png 2>/dev/null || true
 
 # Set environment variables for Streamlit
 ENV STREAMLIT_SERVER_PORT=8080
