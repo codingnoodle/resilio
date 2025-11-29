@@ -8,6 +8,18 @@
 **Track:** Enterprise / Business  
 **Deployment:** [Link to Video Demo]
 
+## 📖 Table of Contents
+
+- [The Business Problem](#-the-business-problem)
+- [The Solution](#-the-solution-resilio)
+- [Course Concepts Applied](#-course-concepts-applied)
+- [Architecture](#️-architecture-the-truth-sandwich)
+- [Agent Workflow](#-agent-workflow-langgraph)
+- [Development Journey](#-development-journey)
+- [Installation & Usage](#-installation--usage)
+- [Testing & Validation](#-testing--validation)
+- [Project Structure](#-project-structure)
+
 ---
 
 ## 🚨 The Business Problem
@@ -83,10 +95,8 @@ Sentinel (Detect) → Detective (Trace) → Quantifier (Calculate) → Strategis
 ### Workflow Diagram
 
 <div align="center">
-  <img src="ui/workflow_diagram.svg" alt="Multi-Agent Workflow" width="192" style="max-width: 192px;" />
+  <img src="ui/workflow_diagram.svg" alt="Multi-Agent Workflow" width="600" />
 </div>
-
-The workflow diagram above illustrates the complete multi-agent system architecture, showing how each agent processes information and passes it to the next stage in the pipeline.
 
 ### Agent Descriptions
 
@@ -120,19 +130,19 @@ The workflow diagram above illustrates the complete multi-agent system architect
 
 Our journey to building Resilio followed **three phases of discovery**, addressing critical enterprise adoption barriers:
 
-### The Hallucination Trap (Reliability)
+### 1. The Hallucination Trap (Reliability)
 
 Early prototypes using simple RAG would hallucinate suppliers or fail to distinguish between a "Fire near a factory" and "Fire at a factory."
 
 **Pivot:** We moved from semantic search to **Deterministic Entity Grounding**. We stress-tested the system with ambiguous inputs (e.g., "Storm near Mock Town") and enforced a Python-based fuzzy match against our graph. This reduced false positives to near-zero, ensuring the "Control Tower" only lights up for verified network hits.
 
-### The Math Problem (Accuracy)
+### 2. The Math Problem (Accuracy)
 
 We found that LLMs are unreliable at arithmetic, often inventing financial losses. In an enterprise setting, a wrong number is worse than no number.
 
 **Pivot:** We stripped the math capabilities out of the LLM and into a **Python Tool**. We implemented a **Monte Carlo Simulation** (1,000 replications) to model demand volatility and recovery uncertainty. This allows us to present a **Confidence Interval (P5-P95)** rather than a guess, aligning with how Risk Managers actually assess exposure.
 
-### The Trust Gap (Explainability)
+### 3. The Trust Gap (Explainability)
 
 Supply chain leaders told us they wouldn't trust a "Black Box" recommendation like "Buy more inventory."
 
@@ -247,15 +257,7 @@ In a production supply chain system, **false positives are costly** (unnecessary
 python src/testing.py
 ```
 
-**Expected Output:** All 6 tests should pass in ~2 seconds, confirming:
-- ✅ Entity grounding (fuzzy matching)
-- ✅ Location-priority logic
-- ✅ Probabilistic math integrity
-- ✅ Hallucination prevention
-- ✅ Internal BioTherapy scenario
-- ✅ Multiple event types per location
-
-These tests serve as **regression guards** during development and provide confidence that the system maintains its reliability as new features are added.
+**Expected Output:** All 6 tests should pass in ~2 seconds, confirming system integrity.
 
 ---
 
@@ -285,56 +287,37 @@ resilio/
 
 ## 📊 Knowledge Graph Structure
 
-### Locations
-- **Mock Town, NJ (USA)** - Internal manufacturing facility
-- **North Cove, NC (USA)** - Partner B facility
-- **Rocky Mount, NC (USA)** - Partner C facility
-- **Mumbai, India** - Partner D facility
-- **Rotterdam, EU** - Logistics hub
-
-### Entities
-- **PharmaCorp A (Internal)** - Internal manufacturing
-- **PharmaCorp B (Tier 1 Partner)** - IV Fluid supplier
-- **PharmaCorp C (Tier 1 Partner)** - Sterile injectable supplier
-- **PharmaCorp D (Tier 2 Partner)** - Raw material supplier
-- **EU Logistics** - European logistics partner
-
-### Products
-- **Product X BioTherapy** - Finished BioTherapy product (CAR-T proxy)
-- **Product Y Sterile** - Sterile injectable component
-- **Product Z Commodity** - Critical commodity component
-
-### Ingredients
-- **BioTherapy Raw** - BioTherapy precursor material
-- **API Generic Raw** - Generic API raw material
+| Type | Name | Role |
+|------|------|------|
+| **Location** | Mock Town, NJ (USA) | Internal Mfg Facility |
+| **Location** | North Cove, NC (USA) | Partner B Facility |
+| **Location** | Rocky Mount, NC (USA) | Partner C Facility |
+| **Location** | Mumbai, India | Partner D Facility |
+| **Location** | Rotterdam, EU | Logistics Hub |
+| **Entity** | PharmaCorp A | Internal Mfg |
+| **Entity** | PharmaCorp B (Tier 1) | IV Fluid Supplier |
+| **Entity** | PharmaCorp C (Tier 1) | Sterile Injectable Supplier |
+| **Entity** | PharmaCorp D (Tier 2) | Raw Material Supplier |
+| **Entity** | EU Logistics | European Logistics Partner |
+| **Product** | Product X BioTherapy | Finished BioTherapy (CAR-T proxy) |
+| **Product** | Product Y Sterile | Sterile Injectable Component |
+| **Product** | Product Z Commodity | Critical Commodity Component |
+| **Ingredient** | BioTherapy Raw | Precursor Material |
 
 ---
 
 ## 📚 Citations & Data Sources
 
-- **Supply Chain Data**: Synthetic ontology modeled after the FDA Drug Safety Communication: Rocky Mount Tornado Damage (https://www.fda.gov/media/170647/download)
-- **Satellite Data**: [NASA Earth Observatory Natural Event Tracker (EONET) API](https://eonet.gsfc.nasa.gov/)
-- **Search**: [Tavily AI](https://tavily.com/) for agent-optimized web search
-- **LLM**: [Google Gemini 2.5 Flash](https://ai.google.dev/models/gemini) via LangChain
-
----
-
-## 📚 Documentation
-
-- **[Risk Calculation Explained](RISK_CALCULATION_EXPLAINED.md)** - Detailed methodology for Monte Carlo simulation
-- **Dashboard Guide** - Interactive UI with knowledge graph visualization
+- **Supply Chain Data**: Synthetic ontology modeled after the FDA Drug Safety Communication: Rocky Mount Tornado Damage
+- **Satellite Data**: NASA Earth Observatory Natural Event Tracker (EONET) API
+- **Search**: Tavily AI for agent-optimized web search
+- **LLM**: Google Gemini 2.5 Flash via LangChain
 
 ---
 
 ## 📝 License
 
 MIT License
-
----
-
-## 🤝 Contributing
-
-Contributions welcome! Please open an issue or submit a pull request.
 
 ---
 
