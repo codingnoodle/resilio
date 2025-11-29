@@ -446,8 +446,8 @@ def plot_workflow_diagram():
         """)
 
 def main_control_tower():
-    st.set_page_config(page_title="Resilio Control Tower", layout="wide")
-    st.markdown("## 🛡️ RESILIO: Supply Chain Control Tower")
+    st.set_page_config(page_title="Resilio: The Cognitive Supply Chain Engine", layout="wide")
+    st.markdown("## 🛡️ RESILIO: The Cognitive Supply Chain Engine")
     if USE_REAL_LLM: st.caption("🟢 **ONLINE:** Connected to Gemini + Tavily + NASA.")
     else: st.caption("🔒 **ZERO-DEPENDENCY MODE:** Running deterministic mock engine.")
     st.markdown("---")
