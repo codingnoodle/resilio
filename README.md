@@ -4,9 +4,9 @@
 
 **Agentic GraphRAG for Pharmaceutical Resilience**
 
-**Status:** 🏆 Kaggle GenAI Agents Capstone Submission  
+**Status:** 🏆 GenAI Agents Capstone Submission  
 **Track:** Enterprise / Business  
-**Deployment:** [Link to Video Demo] | [Link to Kaggle Notebook Demo]
+**Deployment:** [Link to Video Demo]
 
 ---
 
@@ -80,7 +80,7 @@ Sentinel (Detect) → Detective (Trace) → Quantifier (Calculate) → Strategis
 
 ### Workflow Diagram
 
-<img src="ui/workflow_diagram.svg" alt="Multi-Agent Workflow" width="600" />
+<img src="ui/workflow_diagram.svg" alt="Multi-Agent Workflow" width="192" style="max-width: 192px;" />
 
 The workflow diagram above illustrates the complete multi-agent system architecture, showing how each agent processes information and passes it to the next stage in the pipeline.
 
