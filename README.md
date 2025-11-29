@@ -4,7 +4,7 @@
 
 **Agentic GraphRAG for Pharmaceutical Resilience**
 
-**Status:** 🏆 GenAI Agents Capstone Submission  
+**Status:** 🏆 5-Day Gen AI Intensive Course with Google Capstone Submission  
 **Track:** Enterprise / Business  
 **Deployment:** [Link to Video Demo]
 
