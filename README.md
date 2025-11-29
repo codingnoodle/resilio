@@ -95,7 +95,7 @@ Sentinel (Detect) → Detective (Trace) → Quantifier (Calculate) → Strategis
 ### Workflow Diagram
 
 <div align="center">
-  <img src="ui/workflow_diagram.svg" alt="Multi-Agent Workflow" width="600" />
+  <img src="ui/workflow_diagram.svg" alt="Multi-Agent Workflow" width="200" />
 </div>
 
 ### Agent Descriptions
