@@ -6,7 +6,7 @@
 
 **Status:** 🏆 5-Day Gen AI Intensive Course with Google Capstone Submission  
 **Track:** Enterprise / Business  
-**Deployment:** [Link to Video Demo]
+**Deployment:** [Video Demo](https://youtu.be/jllmIYsrGSE)
 
 ## 📖 Table of Contents
 
