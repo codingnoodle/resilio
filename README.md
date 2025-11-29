@@ -211,7 +211,7 @@ Set `USE_REAL_LLM = False` in `src/resilio_core.py` to run in deterministic mock
 
 **Valid inputs in Zero-Dependency Mode:**
 - **Locations:** North Carolina, Rocky Mount, North Cove, New Jersey, Mock Town, Mumbai, Rotterdam
-- **Partners:** Pfizer, Baxter, Janssen, PharmaCorp, India
+- **Partners:** PharmaCorp A, B, C, D, EU Logistics
 - **Disruptions:** Fire, Tornado, Hurricane, Strike, Floods, Logistics
 
 ### Real LLM Mode
@@ -295,7 +295,7 @@ resilio/
 
 ## 📚 Citations & Data Sources
 
-- **Supply Chain Data**: Synthetic ontology modeled after the FDA Drug Safety Communication: Pfizer Rocky Mount Tornado Damage (https://www.fda.gov/media/170647/download)
+- **Supply Chain Data**: Synthetic ontology modeled after the FDA Drug Safety Communication: Rocky Mount Tornado Damage (https://www.fda.gov/media/170647/download)
 - **Satellite Data**: [NASA Earth Observatory Natural Event Tracker (EONET) API](https://eonet.gsfc.nasa.gov/)
 - **Search**: [Tavily AI](https://tavily.com/) for agent-optimized web search
 - **LLM**: [Google Gemini 2.5 Flash](https://ai.google.dev/models/gemini) via LangChain

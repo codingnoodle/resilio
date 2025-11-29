@@ -476,11 +476,11 @@ def main_control_tower():
                     **The Zero-Dependency Brain recognizes these key nodes:**
                     
                     * **Locations:** North Carolina, Rocky Mount, North Cove, New Jersey, Mock Town, Mumbai, Rotterdam
-                    * **Partners:** Pfizer, Baxter, Janssen, PharmaCorp, India
+                    * **Partners:** PharmaCorp A, B, C, D, EU Logistics
                     * **Disruptions:** Fire, Tornado, Hurricane, Strike, Floods, Logistics
                     
                     **Example inputs:**
-                    - "Severe flooding impacts Baxter facility in North Carolina."
+                    - "Severe flooding impacts facility in North Carolina."
                     - "Fire reported at facility in Mumbai."
                     - "Tornado strikes Rocky Mount, NC facility."
                     - "Port strike in Rotterdam halts exports."

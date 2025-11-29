@@ -62,10 +62,10 @@ def build_resilio_graph():
     G.add_node("EU_Logistics", type="Logistics Partner", reliability=0.92)
 
     # --- PRODUCTS (All set to Low Inventory for Demo Drama) ---
-    # Product X = Finished BioTherapy (Carvykti proxy) - Zero Inventory (Vein-to-Vein)
+    # Product X = Finished BioTherapy - Zero Inventory (Vein-to-Vein)
     G.add_node("Product_X_BioTherapy", type="Product (Finished)", revenue_annual=500_000_000, inventory_weeks=0)
     
-    # Product Y = Sterile Injectable (Pfizer proxy) - Low Inventory
+    # Product Y = Sterile Injectable - Low Inventory
     G.add_node("Product_Y_Sterile", type="Product (Component)", revenue_annual=1_200_000_000, inventory_weeks=2)
     
     # Product Z = Critical Commodity (Saline proxy) - Reduced to 2 weeks for demo
@@ -134,9 +134,9 @@ def fuzzy_find_entity(query, graph):
     q = query.lower()
     # Updated: Add location keywords for better matching
     # Priority order: specific locations first, then generic regions
-    if any(kw in q for kw in ["janssen", "mock town", "car-t", "cart", "biotherapy", "nj", "jersey", "new jersey"]): return "PharmaCorp_A_Internal"
-    if "baxter" in q or "north cove" in q or "iv fluid" in q: return "PharmaCorp_B_Tier1"
-    if "pfizer" in q or "rocky mount" in q: return "PharmaCorp_C_Tier1"
+    if any(kw in q for kw in ["mock town", "car-t", "cart", "biotherapy", "nj", "jersey", "new jersey"]): return "PharmaCorp_A_Internal"
+    if "north cove" in q or "iv fluid" in q: return "PharmaCorp_B_Tier1"
+    if "rocky mount" in q: return "PharmaCorp_C_Tier1"
     if "india" in q or "mumbai" in q: return "PharmaCorp_D_Tier2"
     if "rotterdam" in q or ("port" in q and ("rotterdam" in q or "eu" in q or "netherlands" in q)): return "EU_Logistics"
     # Fallback: generic location matching (less specific)
@@ -154,11 +154,11 @@ def fuzzy_find_entity(query, graph):
 # ==========================================
 # Increased durations to guarantee they exceed the 2-4 week inventory buffers
 DISRUPTION_PROFILES = {
-    "Tornado": (90, 15),       # 3 months (Wipes out 2w buffer) - Pfizer scenario
-    "Hurricane": (60, 10),     # 2 months (Wipes out 4w buffer) - Baxter scenario - BOOSTED from 45
-    "Fire": (75, 14),          # 2.5 months (Wipes out 4w buffer) - India scenario - BOOSTED from 60
+    "Tornado": (90, 15),       # 3 months (Wipes out 2w buffer) - Rocky Mount scenario
+    "Hurricane": (60, 10),     # 2 months (Wipes out 4w buffer) - North Cove scenario - BOOSTED from 45
+    "Fire": (75, 14),          # 2.5 months (Wipes out 4w buffer) - Mumbai scenario - BOOSTED from 60
     "Strike": (45, 10),        # 1.5 months (Wipes out 4w buffer) - EU Logistics - BOOSTED from 14
-    "Logistics": (21, 5),      # 3 weeks (Wipes out 0w buffer for Product X) - Janssen scenario - BOOSTED from 10
+    "Logistics": (21, 5),      # 3 weeks (Wipes out 0w buffer for Product X) - Mock Town scenario - BOOSTED from 10
     "FDA": (90, 30),           # Regulatory hold is long
     "Default": (45, 7)         # Generic fallback
 }
@@ -240,7 +240,7 @@ def sentinel_agent(state: AgentState):
     news = state['input_news'].lower()
     
     # 1. Prioritize Specific Locations/Partners (check locations first)
-    if "pfizer" in news or "rocky mount" in news:
+    if "rocky mount" in news:
         entity = "PharmaCorp_C_Tier1"
         if "tornado" in news:
             event = "EF3 Tornado (Direct Hit)"
@@ -251,7 +251,7 @@ def sentinel_agent(state: AgentState):
         else:
             event = "Production Disruption"
             
-    elif "baxter" in news or "north cove" in news:
+    elif "north cove" in news:
         entity = "PharmaCorp_B_Tier1"
         if "hurricane" in news or "helene" in news or "flood" in news:
             event = "Hurricane Flooding"
@@ -297,7 +297,7 @@ def sentinel_agent(state: AgentState):
         else:
             event = "Logistics Disruption"
             
-    elif "nj" in news or "mock town" in news or "janssen" in news or "car-t" in news or "biotherapy" in news or "jersey" in news:
+    elif "nj" in news or "mock town" in news or "car-t" in news or "biotherapy" in news or "jersey" in news:
         entity = "PharmaCorp_A_Internal"
         if "fire" in news:
             event = "Internal Facility Fire"
