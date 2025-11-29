@@ -328,6 +328,11 @@ def sentinel_agent(state: AgentState):
     real_entity = fuzzy_find_entity(entity, KG)
     if not real_entity: real_entity = fuzzy_find_entity(state['input_news'], KG)
     
+    # If still no entity found, set to None (will be caught by auditor)
+    if not real_entity:
+        print("   ⚠️ No graph node matched. Alert will be blocked by auditor.")
+        return {"detected_entity": None, "detected_event": "Unknown", "event_severity": 0.0, "verification_log": context}
+    
     return {"detected_entity": real_entity, "detected_event": event, "event_severity": 0.0, "verification_log": context}
 
 def detective_agent(state):
@@ -365,10 +370,60 @@ def strategist_agent(state):
     return {"recommended_action": action}
 
 def auditor_agent(state):
-    is_safe = True 
-    return {"audit_report": AuditReport(hallucination_check=True, math_check=True, faithfulness_score=5, is_safe_to_present=is_safe)}
+    """
+    Validates the agent output before presentation.
+    Safety checks:
+    1. Entity must be grounded to knowledge graph (not None/Unknown)
+    2. Entity must exist in the graph
+    3. Risk calculations must be valid (non-empty if products exist)
+    """
+    # Check 1: Entity grounding (hallucination check)
+    detected_entity = state.get('detected_entity')
+    entity_grounded = detected_entity is not None and detected_entity != "Unknown" and detected_entity in KG.nodes()
+    
+    # Check 2: Event must be detected (not "Unknown")
+    detected_event = state.get('detected_event', 'Unknown')
+    event_valid = detected_event != "Unknown"
+    
+    # Check 3: Math integrity - risk calculations should exist and be valid
+    risk_calc = state.get('risk_calculations', {})
+    math_valid = True
+    if risk_calc:
+        # Check if risk calculations have expected structure
+        if 'total_expected' not in risk_calc or 'details' not in risk_calc:
+            math_valid = False
+        # Check if details are valid
+        if risk_calc.get('details'):
+            for prod, details in risk_calc['details'].items():
+                if not isinstance(details, dict) or 'loss_p50' not in details:
+                    math_valid = False
+                    break
+    
+    # Overall safety: All checks must pass
+    is_safe = entity_grounded and event_valid and math_valid
+    
+    # Calculate faithfulness score (0-5 scale)
+    faithfulness_score = 0
+    if entity_grounded: faithfulness_score += 2
+    if event_valid: faithfulness_score += 1
+    if math_valid: faithfulness_score += 2
+    
+    return {
+        "audit_report": AuditReport(
+            hallucination_check=entity_grounded,
+            math_check=math_valid,
+            faithfulness_score=faithfulness_score,
+            is_safe_to_present=is_safe
+        )
+    }
 
 def check_audit(state) -> Literal["approved", "retry"]:
+    """
+    Conditional edge function: always approves to allow workflow to complete.
+    The dashboard will check is_safe_to_present and block unsafe results from display.
+    This prevents infinite retry loops while still allowing the audit to mark unsafe results.
+    """
+    # Always approve to complete workflow - dashboard will handle blocking unsafe results
     return "approved"
 
 def build_workflow():
