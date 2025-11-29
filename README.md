@@ -12,6 +12,7 @@
 
 ## 🚨 The Business Problem
 
+![Supply Chain Problem Visualization](supply_problem.jpg)
 
 Pharma supply chains are fragile. Yet, the current landscape of tools leaves critical gaps in **Time-to-Insight**:
 
@@ -24,8 +25,6 @@ While Generative AI offers a potential bridge, **standard RAG chatbots fail to a
 - **"Frozen in Time"** - Training data cutoff means they miss real-time events
 - **"Deterministic"** - They cannot verify if a fire reported on Twitter is real
 - **"Unaware"** - They cannot pinpoint a factory's exact location relative to a hurricane
-
-![Supply Chain Problem Visualization](supply_problem.jpg)
 
 ---
 
