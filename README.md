@@ -80,7 +80,9 @@ Sentinel (Detect) → Detective (Trace) → Quantifier (Calculate) → Strategis
 
 ### Workflow Diagram
 
-<img src="ui/workflow_diagram.svg" alt="Multi-Agent Workflow" width="192" style="max-width: 192px;" />
+<div align="center">
+  <img src="ui/workflow_diagram.svg" alt="Multi-Agent Workflow" width="192" style="max-width: 192px;" />
+</div>
 
 The workflow diagram above illustrates the complete multi-agent system architecture, showing how each agent processes information and passes it to the next stage in the pipeline.
 
