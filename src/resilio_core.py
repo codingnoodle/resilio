@@ -9,7 +9,10 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.tools.tavily_search import TavilySearchResults
 from pydantic import BaseModel, Field
 from langgraph.graph import StateGraph, END
+from dotenv import load_dotenv
 
+# Load environment variables from .env file
+load_dotenv()
 
 # --- CONFIGURATION ---
 # Set to True to enable real LLM (Gemini + Tavily + NASA)
