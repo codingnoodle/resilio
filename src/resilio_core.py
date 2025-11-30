@@ -15,23 +15,34 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # --- CONFIGURATION ---
-# Set to True to enable real LLM (Gemini + Tavily + NASA)
-USE_REAL_LLM = True 
+# Auto-detect if real LLM should be used based on API key presence
+# Can be overridden by environment variable USE_REAL_LLM=true/false
+USE_REAL_LLM_ENV = os.environ.get("USE_REAL_LLM", "").lower()
+if USE_REAL_LLM_ENV == "true":
+    USE_REAL_LLM = True
+elif USE_REAL_LLM_ENV == "false":
+    USE_REAL_LLM = False
+else:
+    # Auto-detect: enable if GOOGLE_API_KEY is present
+    USE_REAL_LLM = bool(os.environ.get("GOOGLE_API_KEY"))
+
 DEFAULT_DISRUPTION_DAYS = 60 
 np.random.seed(42)
 
 # Initialize Gemini 2.5 Flash for performance
+llm = None
 if USE_REAL_LLM:
     try:
-        if os.environ.get("GOOGLE_API_KEY"):
+        google_api_key = os.environ.get("GOOGLE_API_KEY")
+        if google_api_key and google_api_key != "your_google_api_key_here":
             llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.1)
         else:
+            USE_REAL_LLM = False
             llm = None
     except Exception as e:
         print(f"⚠️ Warning: Could not initialize Gemini LLM: {e}")
+        USE_REAL_LLM = False
         llm = None
-else:
-    llm = None
 
 # ==========================================
 # 1. KNOWLEDGE GRAPH (Tuned for High Impact Demo)
@@ -128,19 +139,27 @@ def fuzzy_find_entity(query, graph):
     q = query.lower()
     # Updated: Add location keywords for better matching
     # Priority order: specific locations first, then generic regions
-    if any(kw in q for kw in ["mock town", "car-t", "cart", "biotherapy", "nj", "jersey", "new jersey"]): return "PharmaCorp_A_Internal"
+    # Only match if location explicitly matches - don't match generic terms
+    
+    # Explicit location matches only
+    if any(kw in q for kw in ["mock town", "car-t", "cart", "biotherapy"]): return "PharmaCorp_A_Internal"
+    # Match NJ/New Jersey only if not part of "New York" or other states
+    if ("nj" in q or "jersey" in q or "new jersey" in q) and "new york" not in q: return "PharmaCorp_A_Internal"
     if "north cove" in q or "iv fluid" in q: return "PharmaCorp_B_Tier1"
     if "rocky mount" in q: return "PharmaCorp_C_Tier1"
-    if "india" in q or "mumbai" in q: return "PharmaCorp_D_Tier2"
-    if "rotterdam" in q or ("port" in q and ("rotterdam" in q or "eu" in q or "netherlands" in q)): return "EU_Logistics"
-    # Fallback: generic location matching (less specific)
+    if ("india" in q or "mumbai" in q) and "new" not in q: return "PharmaCorp_D_Tier2"
+    if "rotterdam" in q or ("port" in q and ("rotterdam" in q or "netherlands" in q)): return "EU_Logistics"
+    # Fallback: generic location matching (less specific) - but be careful
     if "north carolina" in q or ("nc" in q and "carolina" in q):
         # Default to North Cove (Partner B) if no specific city mentioned
         if "rocky mount" in q:
             return "PharmaCorp_C_Tier1"
         else:
             return "PharmaCorp_B_Tier1"
-    matches = difflib.get_close_matches(query, list(graph.nodes()), n=1, cutoff=0.4)
+    
+    # Only use string similarity matching if query is very similar to a node name
+    # This prevents "new york" from matching "mumbai" or other unrelated nodes
+    matches = difflib.get_close_matches(query, list(graph.nodes()), n=1, cutoff=0.6)  # Increased cutoff from 0.4 to 0.6
     return matches[0] if matches else None
 
 # ==========================================
@@ -230,46 +249,77 @@ def sentinel_agent(state: AgentState):
     
     entity, event = "Unknown", "Unknown"
     
-    # --- UPDATED MOCK LOGIC: Prioritize Locations before Generic Events ---
-    news = state['input_news'].lower()
+    # --- USE REAL LLM IF AVAILABLE ---
+    if llm is not None and USE_REAL_LLM:
+        try:
+            prompt = f"""Extract the supply chain entity and event type from this news:
+"{state['input_news']}"
+
+Available entities in our supply chain (ONLY match if location matches):
+- PharmaCorp_A_Internal (Mock Town, New Jersey, NJ)
+- PharmaCorp_B_Tier1 (North Cove, North Carolina, NC)
+- PharmaCorp_C_Tier1 (Rocky Mount, North Carolina, NC)
+- PharmaCorp_D_Tier2 (Mumbai, India)
+- EU_Logistics (Rotterdam, Netherlands, EU)
+
+IMPORTANT: If the location in the news does NOT match any of the above locations, return "Unknown" for entity.
+Only match entities when the location explicitly matches (e.g., "New York" should return "Unknown", not any of the above entities).
+
+Respond in JSON format only, no other text:
+{{"entity": "entity_name_or_Unknown", "event": "event_description"}}"""
+
+            response = llm.invoke(prompt)
+            content = response.content if hasattr(response, 'content') else str(response)
+            
+            # Try to parse JSON response
+            try:
+                import json
+                import re
+                # Extract JSON from response if wrapped in markdown code blocks
+                if '```' in content:
+                    json_str = content.split('```')[1].replace('json', '').strip()
+                    # Remove markdown code block markers
+                    json_str = re.sub(r'^```json\s*', '', json_str)
+                    json_str = re.sub(r'\s*```$', '', json_str)
+                else:
+                    # Try to find JSON object in the response
+                    json_match = re.search(r'\{[^{}]*"entity"[^{}]*\}', content)
+                    if json_match:
+                        json_str = json_match.group(0)
+                    else:
+                        json_str = content.strip()
+                
+                parsed = json.loads(json_str)
+                entity = parsed.get('entity', 'Unknown')
+                event = parsed.get('event', 'Unknown')
+            except json.JSONDecodeError:
+                # Keep entity/event as Unknown to use fallback
+                pass
+            except Exception:
+                # Keep entity/event as Unknown to use fallback
+                pass
+        except Exception:
+            # Fall back to keyword matching on error
+            pass
     
-    # 1. Prioritize Specific Locations/Partners (check locations first)
-    if "rocky mount" in news:
-        entity = "PharmaCorp_C_Tier1"
-        if "tornado" in news:
-            event = "EF3 Tornado (Direct Hit)"
-        elif "hurricane" in news or "flood" in news:
-            event = "Hurricane Flooding"
-        elif "fire" in news:
-            event = "Factory Fire"
-        else:
-            event = "Production Disruption"
-            
-    elif "north cove" in news:
-        entity = "PharmaCorp_B_Tier1"
-        if "hurricane" in news or "helene" in news or "flood" in news:
-            event = "Hurricane Flooding"
-        elif "fire" in news:
-            event = "Factory Fire"
-        elif "tornado" in news:
-            event = "Tornado Damage"
-        else:
-            event = "Production Disruption"
-            
-    elif "north carolina" in news or ("nc" in news and "carolina" in news):
-        # Generic North Carolina - check for specific cities
+    # --- FALLBACK: MOCK LOGIC (keyword matching) ---
+    # Use mock logic if LLM didn't extract or isn't available
+    if entity == "Unknown" or event == "Unknown":
+        news = state['input_news'].lower()
+        
+        # 1. Prioritize Specific Locations/Partners (check locations first)
         if "rocky mount" in news:
             entity = "PharmaCorp_C_Tier1"
             if "tornado" in news:
                 event = "EF3 Tornado (Direct Hit)"
+            elif "hurricane" in news or "flood" in news:
+                event = "Hurricane Flooding"
             elif "fire" in news:
                 event = "Factory Fire"
-            elif "hurricane" in news:
-                event = "Hurricane Impact"
             else:
                 event = "Production Disruption"
-        else:
-            # Default to North Cove (Partner B) for generic NC
+                
+        elif "north cove" in news:
             entity = "PharmaCorp_B_Tier1"
             if "hurricane" in news or "helene" in news or "flood" in news:
                 event = "Hurricane Flooding"
@@ -279,48 +329,82 @@ def sentinel_agent(state: AgentState):
                 event = "Tornado Damage"
             else:
                 event = "Production Disruption"
-            
-    elif "rotterdam" in news or ("port" in news and "eu" in news):
-        entity = "EU_Logistics"
-        if "strike" in news:
-            event = "Port Strike"
-        elif "fire" in news:
-            event = "Port Facility Fire"
-        elif "hurricane" in news:
-            event = "Severe Weather Disruption"
-        else:
-            event = "Logistics Disruption"
-            
-    elif "nj" in news or "mock town" in news or "car-t" in news or "biotherapy" in news or "jersey" in news:
-        entity = "PharmaCorp_A_Internal"
-        if "fire" in news:
-            event = "Internal Facility Fire"
-        elif "hurricane" in news or "flood" in news:
-            event = "Hurricane Impact"
-        elif "tornado" in news:
-            event = "Tornado Damage"
-        elif "logistics" in news or "truck" in news:
-            event = "Internal Logistics Failure"
-        else:
-            event = "Internal Production Disruption"
-    
-    # 2. Fallback to Generic Regions/Types (only if no specific location found)
-    elif "india" in news or "mumbai" in news:
-        entity = "PharmaCorp_D_Tier2"
-        if "fire" in news:
-            event = "Factory Fire"
-        elif "hurricane" in news:
-            event = "Monsoon Flooding"
-        else:
-            event = "Production Disruption"
-            
-    elif "fire" in news:
-        # Generic fire defaults to Tier 2 if no other location found
-        entity = "PharmaCorp_D_Tier2"
-        event = "Factory Fire (Generic)"
+                
+        elif "north carolina" in news or ("nc" in news and "carolina" in news):
+            # Generic North Carolina - check for specific cities
+            if "rocky mount" in news:
+                entity = "PharmaCorp_C_Tier1"
+                if "tornado" in news:
+                    event = "EF3 Tornado (Direct Hit)"
+                elif "fire" in news:
+                    event = "Factory Fire"
+                elif "hurricane" in news:
+                    event = "Hurricane Impact"
+                else:
+                    event = "Production Disruption"
+            else:
+                # Default to North Cove (Partner B) for generic NC
+                entity = "PharmaCorp_B_Tier1"
+                if "hurricane" in news or "helene" in news or "flood" in news:
+                    event = "Hurricane Flooding"
+                elif "fire" in news:
+                    event = "Factory Fire"
+                elif "tornado" in news:
+                    event = "Tornado Damage"
+                else:
+                    event = "Production Disruption"
+                
+        elif "rotterdam" in news or ("port" in news and "eu" in news):
+            entity = "EU_Logistics"
+            if "strike" in news:
+                event = "Port Strike"
+            elif "fire" in news:
+                event = "Port Facility Fire"
+            elif "hurricane" in news:
+                event = "Severe Weather Disruption"
+            else:
+                event = "Logistics Disruption"
+                
+        elif "nj" in news or "mock town" in news or "car-t" in news or "biotherapy" in news or "jersey" in news:
+            entity = "PharmaCorp_A_Internal"
+            if "fire" in news:
+                event = "Internal Facility Fire"
+            elif "hurricane" in news or "flood" in news:
+                event = "Hurricane Impact"
+            elif "tornado" in news:
+                event = "Tornado Damage"
+            elif "logistics" in news or "truck" in news:
+                event = "Internal Logistics Failure"
+            else:
+                event = "Internal Production Disruption"
         
-    real_entity = fuzzy_find_entity(entity, KG)
-    if not real_entity: real_entity = fuzzy_find_entity(state['input_news'], KG)
+        # 2. Fallback to Generic Regions/Types (only if no specific location found)
+        elif "india" in news or "mumbai" in news:
+            entity = "PharmaCorp_D_Tier2"
+            if "fire" in news:
+                event = "Factory Fire"
+            elif "hurricane" in news:
+                event = "Monsoon Flooding"
+            else:
+                event = "Production Disruption"
+                
+        elif "fire" in news:
+            # Generic fire - but only if no specific location mentioned
+            # Don't default to Mumbai for generic fires in unknown locations
+            # This prevents "New York fire" from mapping to Mumbai
+            entity = "Unknown"  # Let fuzzy matching handle it, or return None if not in graph
+            event = "Fire (Unknown Location)"
+    
+    # Use fuzzy matching to find the actual graph node
+    # Only try fuzzy matching if entity is not Unknown
+    if entity != "Unknown":
+        real_entity = fuzzy_find_entity(entity, KG)
+    else:
+        # If entity is Unknown, try fuzzy matching on the original input
+        # but this should only match if it's actually in our supply chain
+        real_entity = fuzzy_find_entity(state['input_news'], KG)
+        if not real_entity:
+            print(f"   ⚠️ No matching entity found for: {state['input_news']}")
     
     # If still no entity found, set to None (will be caught by auditor)
     if not real_entity:
