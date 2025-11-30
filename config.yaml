@@ -1,0 +1,213 @@
+# Resilio Configuration File
+# This file contains all event types, locations, disruption parameters, and inventory settings
+# Users can modify this file to adjust disruption days, inventory weeks, and add new locations/events
+# without changing the code.
+
+# Event Type Definitions
+# Each event type specifies:
+#   - keywords: List of keywords to detect this event type in text
+#   - disruption_days: [mean, sigma] - Normal distribution parameters for Monte Carlo simulation
+#   - description: Default description for this event type
+event_types:
+  Tornado:
+    keywords: ["tornado"]
+    disruption_days: [90, 15]  # Mean: 90 days, Sigma: 15 days (3 months)
+    description: "Tornado"
+  
+  Hurricane:
+    keywords: ["hurricane", "flood", "helene"]
+    disruption_days: [60, 10]  # Mean: 60 days, Sigma: 10 days (2 months)
+    description: "Hurricane"
+  
+  Fire:
+    keywords: ["fire", "explosion"]
+    disruption_days: [75, 14]  # Mean: 75 days, Sigma: 14 days (2.5 months)
+    description: "Fire"
+  
+  Strike:
+    keywords: ["strike", "labor"]
+    disruption_days: [45, 10]  # Mean: 45 days, Sigma: 10 days (1.5 months)
+    description: "Strike"
+  
+  Logistics:
+    keywords: ["logistics", "truck", "delivery", "shipping"]
+    disruption_days: [21, 5]  # Mean: 21 days, Sigma: 5 days (3 weeks)
+    description: "Logistics"
+  
+  FDA:
+    keywords: ["fda", "regulatory"]
+    disruption_days: [90, 30]  # Mean: 90 days, Sigma: 30 days (Regulatory hold is long)
+    description: "FDA"
+  
+  Production Disruption:
+    keywords: ["disruption", "production"]
+    disruption_days: [45, 7]  # Mean: 45 days, Sigma: 7 days (Generic fallback)
+    description: "Production Disruption"
+
+# Location to Entity Mappings
+# Maps location keywords (case-insensitive) to entity IDs in the knowledge graph
+location_entity_map:
+  "rocky mount": "PharmaCorp_C_Tier1"
+  "north cove": "PharmaCorp_B_Tier1"
+  "north carolina": "PharmaCorp_B_Tier1"  # Default NC location
+  "nc": "PharmaCorp_B_Tier1"  # State abbreviation
+  "rotterdam": "EU_Logistics"
+  "netherlands": "EU_Logistics"
+  "port": "EU_Logistics"  # Generic port
+  "nj": "PharmaCorp_A_Internal"
+  "new jersey": "PharmaCorp_A_Internal"
+  "jersey": "PharmaCorp_A_Internal"
+  "mock town": "PharmaCorp_A_Internal"
+  "india": "PharmaCorp_D_Tier2"
+  "mumbai": "PharmaCorp_D_Tier2"
+
+# Location-Specific Event Descriptions
+# Provides specific event descriptions for location + event type combinations
+# Format: location_keyword -> event_type -> description
+# All combinations are defined for completeness
+location_event_descriptions:
+  "rocky mount":
+    Tornado: "EF3 Tornado (Direct Hit)"
+    Hurricane: "Hurricane Flooding"
+    Fire: "Factory Fire"
+    Strike: "Labor Strike"
+    Logistics: "Logistics Disruption"
+    FDA: "Regulatory Hold"
+    Production Disruption: "Production Disruption"
+  
+  "north cove":
+    Tornado: "Tornado Damage"
+    Hurricane: "Hurricane Flooding"
+    Fire: "Factory Fire"
+    Strike: "Labor Strike"
+    Logistics: "Logistics Disruption"
+    FDA: "Regulatory Hold"
+    Production Disruption: "Production Disruption"
+  
+  "north carolina":
+    Tornado: "Tornado Damage"
+    Hurricane: "Hurricane Impact"
+    Fire: "Factory Fire"
+    Strike: "Labor Strike"
+    Logistics: "Logistics Disruption"
+    FDA: "Regulatory Hold"
+    Production Disruption: "Production Disruption"
+  
+  "rotterdam":
+    Tornado: "Severe Weather Disruption"
+    Hurricane: "Severe Weather Disruption"
+    Fire: "Port Facility Fire"
+    Strike: "Port Strike"
+    Logistics: "Port Logistics Disruption"
+    FDA: "Regulatory Hold"
+    Production Disruption: "Port Disruption"
+  
+  "port":
+    Tornado: "Severe Weather Disruption"
+    Hurricane: "Severe Weather Disruption"
+    Fire: "Port Facility Fire"
+    Strike: "Port Strike"
+    Logistics: "Port Logistics Disruption"
+    FDA: "Regulatory Hold"
+    Production Disruption: "Port Disruption"
+  
+  "netherlands":
+    Tornado: "Severe Weather Disruption"
+    Hurricane: "Severe Weather Disruption"
+    Fire: "Port Facility Fire"
+    Strike: "Port Strike"
+    Logistics: "Port Logistics Disruption"
+    FDA: "Regulatory Hold"
+    Production Disruption: "Port Disruption"
+  
+  "nj":
+    Tornado: "Tornado Damage"
+    Hurricane: "Hurricane Impact"
+    Fire: "Internal Facility Fire"
+    Strike: "Labor Strike"
+    Logistics: "Internal Logistics Failure"
+    FDA: "Regulatory Hold"
+    Production Disruption: "Internal Production Disruption"
+  
+  "new jersey":
+    Tornado: "Tornado Damage"
+    Hurricane: "Hurricane Impact"
+    Fire: "Internal Facility Fire"
+    Strike: "Labor Strike"
+    Logistics: "Internal Logistics Failure"
+    FDA: "Regulatory Hold"
+    Production Disruption: "Internal Production Disruption"
+  
+  "jersey":
+    Tornado: "Tornado Damage"
+    Hurricane: "Hurricane Impact"
+    Fire: "Internal Facility Fire"
+    Strike: "Labor Strike"
+    Logistics: "Internal Logistics Failure"
+    FDA: "Regulatory Hold"
+    Production Disruption: "Internal Production Disruption"
+  
+  "mock town":
+    Tornado: "Tornado Damage"
+    Hurricane: "Hurricane Impact"
+    Fire: "Internal Facility Fire"
+    Strike: "Labor Strike"
+    Logistics: "Internal Logistics Failure"
+    FDA: "Regulatory Hold"
+    Production Disruption: "Internal Production Disruption"
+  
+  "india":
+    Tornado: "Severe Weather Event"
+    Hurricane: "Monsoon Flooding"
+    Fire: "Factory Fire"
+    Strike: "Labor Strike"
+    Logistics: "Supply Chain Disruption"
+    FDA: "Regulatory Hold"
+    Production Disruption: "Production Disruption"
+  
+  "mumbai":
+    Tornado: "Severe Weather Event"
+    Hurricane: "Monsoon Flooding"
+    Fire: "Factory Fire"
+    Strike: "Labor Strike"
+    Logistics: "Supply Chain Disruption"
+    FDA: "Regulatory Hold"
+    Production Disruption: "Production Disruption"
+
+# Default Event Descriptions
+# Used when location-specific description is not found
+default_event_descriptions:
+  Tornado: "Tornado Damage"
+  Hurricane: "Hurricane Impact"
+  Fire: "Factory Fire"
+  Strike: "Labor Strike"
+  Logistics: "Logistics Disruption"
+  FDA: "Regulatory Hold"
+  Production Disruption: "Production Disruption"
+
+# Inventory Overrides (Optional)
+# Override inventory_weeks for specific entities in the knowledge graph
+# If not specified, uses values from build_resilio_graph()
+# Format: entity_id -> inventory_weeks
+inventory_overrides:
+  # Example:
+  # "PharmaCorp_D_Tier2": 6  # Override Mumbai inventory to 6 weeks
+  # "Product_X_BioTherapy": 1  # Override Product X inventory to 1 week
+
+# Location Priority Order
+# Determines which location keyword takes precedence when multiple match
+location_priority:
+  - "rocky mount"
+  - "north cove"
+  - "mock town"
+  - "rotterdam"
+  - "mumbai"
+  - "north carolina"
+  - "nc"
+  - "new jersey"
+  - "jersey"
+  - "nj"
+  - "india"
+  - "netherlands"
+  - "port"
+

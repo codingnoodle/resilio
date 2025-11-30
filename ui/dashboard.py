@@ -520,6 +520,16 @@ def main_control_tower():
     
     rc = result.get('risk_calculations', {})
     
+    # Display API usage if available (Gemini tokens + Tavily searches)
+    token_usage = result.get('token_usage', {})
+    api_usage_parts = []
+    if token_usage and token_usage.get('total_tokens', 0) > 0:
+        api_usage_parts.append(f"**Gemini API:** {token_usage.get('prompt_tokens', 0)} prompt + {token_usage.get('completion_tokens', 0)} completion = {token_usage.get('total_tokens', 0)} total tokens")
+    if token_usage and token_usage.get('tavily_searches', 0) > 0:
+        api_usage_parts.append(f"**Tavily API:** {token_usage.get('tavily_searches', 0)} search query/queries")
+    if api_usage_parts:
+        st.info(f"📊 **API Usage:** {' | '.join(api_usage_parts)}")
+    
     st.markdown("### 🚨 Live Risk Assessment")
     k1, k2, k3, k4, k5 = st.columns(5)
     

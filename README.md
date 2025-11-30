@@ -103,7 +103,8 @@ Sentinel (Detect) → Detective (Trace) → Quantifier (Calculate) → Strategis
 1. **📡 Sentinel Agent** - Detect & Verify
    - Scans news input for supply chain disruptions
    - Uses **Gemini 2.5 Flash** with Tavily (web search) and NASA EONET (geospatial verification)
-   - Maps events to entities in the knowledge graph
+   - Maps events to entities in the knowledge graph using fuzzy matching and keyword mapping
+   - Tracks API usage (Gemini tokens and Tavily searches)
 
 2. **🕵️ Detective Agent** - Trace Impact
    - Traverses the knowledge graph using **Breadth-First Search (BFS)**
@@ -167,14 +168,31 @@ cd resilio
 pip install -r requirements.txt
 ```
 
-**3. Set API Keys (Linux/Mac):**
+**3. Set API Keys:**
+
+Create a `.env` file in the project root (or use `env.template` as a reference):
+
+```bash
+cp env.template .env
+# Edit .env and add your API keys
+```
+
+Or set environment variables (Linux/Mac):
 
 ```bash
 export GOOGLE_API_KEY="your_key"
 export TAVILY_API_KEY="your_key"
 ```
 
-**4. Run the Control Tower:**
+**4. (Optional) Configure Event Types & Locations:**
+
+Edit `config.yaml` to customize:
+- Event types and disruption parameters
+- Location-to-entity mappings
+- Location-specific event descriptions
+- Inventory overrides
+
+**5. Run the Control Tower:**
 
 ```bash
 streamlit run ui/dashboard.py
@@ -217,9 +235,30 @@ gcloud run deploy resilio \
 
 ## ⚙️ Configuration
 
+### Environment Variables
+
+Resilio uses automatic `.env` file loading (via `python-dotenv`). Create a `.env` file in the project root:
+
+```bash
+GOOGLE_API_KEY=your_google_api_key_here
+TAVILY_API_KEY=your_tavily_api_key_here
+USE_REAL_LLM=true  # Optional: auto-detected if GOOGLE_API_KEY is set
+```
+
+### YAML Configuration (`config.yaml`)
+
+All event types, locations, disruption parameters, and inventory overrides are now configurable via `config.yaml`:
+
+- **Event Types**: Define keywords, disruption days (mean, sigma), and descriptions
+- **Location Mappings**: Map location keywords to knowledge graph entities
+- **Event Descriptions**: Location-specific event descriptions
+- **Inventory Overrides**: Override inventory weeks for specific entities
+
+See `config.yaml` for the full configuration schema.
+
 ### Zero-Dependency Mode (Mock)
 
-Set `USE_REAL_LLM = False` in `src/resilio_core.py` to run in deterministic mock mode (no API calls required).
+The system automatically detects if API keys are missing and runs in deterministic mock mode (no API calls required). You can also explicitly set `USE_REAL_LLM=false` in your `.env` file.
 
 **Valid inputs in Zero-Dependency Mode:**
 - **Locations:** North Carolina, Rocky Mount, North Cove, New Jersey, Mock Town, Mumbai, Rotterdam
@@ -228,11 +267,19 @@ Set `USE_REAL_LLM = False` in `src/resilio_core.py` to run in deterministic mock
 
 ### Real LLM Mode
 
-Set `USE_REAL_LLM = True` and ensure API keys are set. The system will use:
+When `GOOGLE_API_KEY` is set, the system automatically enables real LLM mode. The system will use:
 
 - **Google Gemini 2.5 Flash** for entity/event extraction
-- **Tavily Search** for web verification
-- **NASA EONET** for geospatial verification
+- **Tavily Search** for web verification (if `TAVILY_API_KEY` is set)
+- **NASA EONET** for geospatial verification (always available, no key required)
+
+### API Usage Tracking
+
+The dashboard displays real-time API usage:
+- **Gemini API**: Prompt tokens, completion tokens, and total tokens
+- **Tavily API**: Number of search queries executed
+
+This helps monitor API costs and usage patterns.
 
 ---
 
@@ -270,7 +317,10 @@ resilio/
 │   └── testing.py           # Unit tests for risk math and grounding logic
 ├── ui/
 │   ├── dashboard.py         # The Streamlit "Control Tower" interface
-│   └── workflow_diagram.svg  # Multi-agent workflow diagram
+│   ├── workflow_diagram.svg # Multi-agent workflow diagram
+│   └── workflow_diagram.png # Workflow diagram (PNG version)
+├── config.yaml              # Centralized configuration (events, locations, disruption params)
+├── env.template             # Template for .env file with required environment variables
 ├── Dockerfile               # Container configuration
 ├── requirements.txt         # Python dependencies
 ├── README.md                # This file
@@ -279,9 +329,11 @@ resilio/
 
 ### Key Files
 
-- **`src/resilio_core.py`** - Main application logic, agents, knowledge graph
-- **`ui/dashboard.py`** - Streamlit UI with visualizations
-- **`src/testing.py`** - Unit tests
+- **`src/resilio_core.py`** - Main application logic, agents, knowledge graph, LLM integration
+- **`ui/dashboard.py`** - Streamlit UI with visualizations and API usage tracking
+- **`src/testing.py`** - Unit tests for reliability and API key handling
+- **`config.yaml`** - Centralized configuration for event types, locations, and disruption parameters
+- **`env.template`** - Template showing required environment variables
 
 ---
 
